@@ -37,7 +37,26 @@ else
     cd "$HOME"
 fi
 
-echo "=== 3/3 Autostart bij telefoon-herstart (Termux:Boot) ==="
+echo "=== 3/4 klonkt-token commando installeren ==="
+cat << 'EOF' > "$PREFIX/bin/klonkt-token"
+#!/data/data/com.termux/files/usr/bin/bash
+# Set/clear the Cloudflare named-tunnel token for a fixed own domain.
+if [ -z "$1" ]; then
+    echo "Gebruik:  klonkt-token <token>     (plak de eyJ...-string uit Cloudflare Zero Trust)"
+    echo "          klonkt-token clear       (terug naar tijdelijke trycloudflare-URL)"
+    exit 1
+fi
+if [ "$1" = "clear" ]; then
+    rm -f ~/.klonkt-tunnel-token
+    echo "Token gewist. Herstart de app voor een trycloudflare-URL."
+    exit 0
+fi
+printf '%s' "$1" > ~/.klonkt-tunnel-token
+echo "Token opgeslagen. Herstart de app (of draai: bash ~/.klonkt-start.sh)."
+EOF
+chmod +x "$PREFIX/bin/klonkt-token"
+
+echo "=== 4/4 Autostart bij telefoon-herstart (Termux:Boot) ==="
 mkdir -p ~/.termux/boot
 cat << 'EOF' > ~/.termux/boot/start-klonkt.sh
 #!/data/data/com.termux/files/usr/bin/sh
