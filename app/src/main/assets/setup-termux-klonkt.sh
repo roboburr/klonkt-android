@@ -56,6 +56,9 @@ chmod +x ~/.termux/boot/start-klonkt.sh
 echo "Termux:Boot startscript aangemaakt in ~/.termux/boot/start-klonkt.sh"
 
 echo "=== 6. Node Modules Installeren (dit compileert SQLite voor Android) ==="
+# Fix voor node-gyp (better-sqlite3) op Termux die zoekt naar een missende android_ndk_path variabele
+export GYP_DEFINES="android_ndk_path=''"
+
 cd ~/klonkt-node
 npm install
 
