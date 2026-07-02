@@ -447,8 +447,55 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Termux-commando verzonden...", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             e.printStackTrace()
-            // Do not show system exception log to user; show a helpful manual startup message instead
-            Toast.makeText(this, "Android blokkeert automatisch opstarten. Start de server handmatig in Termux.", Toast.LENGTH_LONG).show()
+            
+            val stackTrace = android.util.Log.getStackTraceString(e)
+            val dialogBuilder = AlertDialog.Builder(this)
+            dialogBuilder.setTitle("Opstartfout (Android Beveiliging)")
+            
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
+            }
+            
+            val errorMsg = TextView(this).apply {
+                text = "Android blokkeert het opstarten van de Termux service.\nGeef Termux 'Weergeven over andere apps' permissie of bekijk de foutmelding hieronder:"
+                setTextColor(Color.BLACK)
+                setPadding(0, 0, 0, dpToPx(16))
+            }
+            container.addView(errorMsg)
+            
+            val scrollView = android.widget.ScrollView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dpToPx(200)
+                )
+            }
+            
+            val errorText = EditText(this).apply {
+                setText(stackTrace)
+                setTextColor(Color.RED)
+                textSize = 10f
+                typeface = Typeface.MONOSPACE
+                isFocusable = false
+                isClickable = true
+                isLongClickable = true
+                setTextIsSelectable(true)
+                background = null
+            }
+            scrollView.addView(errorText)
+            container.addView(scrollView)
+            
+            dialogBuilder.setView(container)
+            
+            dialogBuilder.setPositiveButton("Kopieer Log") { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("Klonkt Error", stackTrace)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "Log gekopieerd naar klembord!", Toast.LENGTH_LONG).show()
+            }
+            dialogBuilder.setNegativeButton("Sluiten", null)
+            
+            dialogBuilder.show()
         }
     }
 
