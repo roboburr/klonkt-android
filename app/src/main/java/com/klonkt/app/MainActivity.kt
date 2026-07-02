@@ -323,44 +323,8 @@ class MainActivity : Activity() {
         rootLayout.addView(contentFrame)
         setContentView(rootLayout)
 
-        // Trigger copying of offline installation ZIP and script using version code check
-        thread {
-            try {
-                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val currentVersionCode = try {
-                    val pInfo = packageManager.getPackageInfo(packageName, 0)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        pInfo.longVersionCode
-                    } else {
-                        pInfo.versionCode.toLong()
-                    }
-                } catch (e: Exception) {
-                    0L
-                }
-                
-                val savedVersionCode = prefs.getLong(KEY_SAVED_VERSION_CODE, -1L)
-                
-                if (currentVersionCode != savedVersionCode) {
-                    runOnUiThread {
-                        statusText.text = "Klonkt installatiebestanden kopiëren naar Download map..."
-                    }
-                    val successZip = copyAssetToDownloads(this@MainActivity, "klonkt-node.zip", "application/zip")
-                    val successScript = copyAssetToDownloads(this@MainActivity, "setup-termux-klonkt.sh", "application/x-sh")
-                    
-                    runOnUiThread {
-                        if (successZip && successScript) {
-                            prefs.edit().putLong(KEY_SAVED_VERSION_CODE, currentVersionCode).apply()
-                            Toast.makeText(this@MainActivity, "Bestanden gekopieerd naar Download map!", Toast.LENGTH_LONG).show()
-                            restartAppLogic()
-                        } else {
-                            Toast.makeText(this@MainActivity, "Kopiëren mislukt. Zorg voor opslagtoegang.", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+        // Start local HTTP server to serve assets directly to Termux
+        startLocalAssetServer()
 
         // Start polling and loading directly (auto-start is removed to prevent background start errors on Android 14+)
         startPollingThread()
@@ -388,40 +352,50 @@ class MainActivity : Activity() {
         editor.apply()
     }
 
-    private fun copyAssetToDownloads(context: Context, assetFileName: String, mimeType: String): Boolean {
-        try {
-            val resolver = context.contentResolver
-            
-            // Delete existing duplicate file to keep it clean
-            val projection = arrayOf(android.provider.MediaStore.MediaColumns._ID)
-            val selection = "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} = ?"
-            val selectionArgs = arrayOf(assetFileName)
-            val queryUri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
-            
-            resolver.query(queryUri, projection, selection, selectionArgs, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID))
-                    val deleteUri = android.content.ContentUris.withAppendedId(queryUri, id)
-                    resolver.delete(deleteUri, null, null)
+    private fun startLocalAssetServer() {
+        thread {
+            try {
+                val serverSocket = java.net.ServerSocket(3021)
+                while (true) {
+                    val client = serverSocket.accept()
+                    thread {
+                        try {
+                            val input = java.io.BufferedReader(java.io.InputStreamReader(client.inputStream))
+                            val requestLine = input.readLine()
+                            if (requestLine != null) {
+                                val out = client.getOutputStream()
+                                val path = requestLine.split(" ")[1]
+                                
+                                if (path == "/setup.sh") {
+                                    val assetStream = assets.open("setup-termux-klonkt.sh")
+                                    val bytes = assetStream.readBytes()
+                                    val response = "HTTP/1.1 200 OK\r\nContent-Length: ${bytes.size}\r\n\r\n"
+                                    out.write(response.toByteArray())
+                                    out.write(bytes)
+                                    out.flush()
+                                } else if (path == "/klonkt-node.zip") {
+                                    val assetStream = assets.open("klonkt-node.zip")
+                                    val bytes = assetStream.readBytes()
+                                    val response = "HTTP/1.1 200 OK\r\nContent-Length: ${bytes.size}\r\nContent-Type: application/zip\r\n\r\n"
+                                    out.write(response.toByteArray())
+                                    out.write(bytes)
+                                    out.flush()
+                                } else {
+                                    val response = "HTTP/1.1 404 Not Found\r\n\r\n"
+                                    out.write(response.toByteArray())
+                                    out.flush()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        } finally {
+                            client.close()
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-
-            val contentValues = android.content.ContentValues().apply {
-                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, assetFileName)
-                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
-            }
-
-            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues) ?: return false
-            resolver.openOutputStream(uri)?.use { outputStream ->
-                context.assets.open(assetFileName).use { inputStream ->
-                    inputStream.copyTo(outputStream)
-                }
-            }
-            return true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return false
         }
     }
 
@@ -487,7 +461,17 @@ class MainActivity : Activity() {
             
             dialogBuilder.setView(container)
             
-            dialogBuilder.setPositiveButton("Kopieer Log") { _, _ ->
+            dialogBuilder.setPositiveButton("FIX RECHTEN") { _, _ ->
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                    intent.data = android.net.Uri.parse("package:com.termux")
+                    startActivity(intent)
+                    Toast.makeText(this, "Geef Termux hier 'Weergeven over andere apps' rechten!", Toast.LENGTH_LONG).show()
+                } catch (ex: Exception) {
+                    Toast.makeText(this, "Kan instellingen niet openen", Toast.LENGTH_SHORT).show()
+                }
+            }
+            dialogBuilder.setNeutralButton("Kopieer Log") { _, _ ->
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 val clip = android.content.ClipData.newPlainText("Klonkt Error", stackTrace)
                 clipboard.setPrimaryClip(clip)

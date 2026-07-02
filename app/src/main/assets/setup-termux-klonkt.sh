@@ -14,15 +14,18 @@ fi
 termux-reload-settings
 
 echo "=== 3. Klonkt Node.js Bestanden Ophalen ==="
-# Check if offline installation zip exists
-if [ -f "/storage/emulated/0/Download/klonkt-node.zip" ]; then
-    echo "Offline installatiebestand (klonkt-node.zip) gevonden in Download map!"
-    echo "Uitpakken van bestanden naar ~/klonkt-node..."
-    rm -rf ~/klonkt-node
-    mkdir -p ~/klonkt-node
-    unzip -q -o /storage/emulated/0/Download/klonkt-node.zip -d ~/klonkt-node
+echo "Bestanden worden gedownload van de Klonkt app..."
+rm -rf ~/klonkt-node
+mkdir -p ~/klonkt-node
+
+# Download zip file directly from the running Klonkt app's local HTTP server
+if curl -f -s "http://127.0.0.1:3021/klonkt-node.zip" -o ~/klonkt-node.zip; then
+    echo "Bestanden succesvol gedownload. Uitpakken..."
+    unzip -q -o ~/klonkt-node.zip -d ~/klonkt-node
+    rm ~/klonkt-node.zip
 else
-    echo "Geen offline zip-bestand gevonden. We gaan clonen van je VPS..."
+    echo "Fout bij het downloaden van de Klonkt app. Zorg dat Klonkt open staat!"
+    echo "We vallen terug op het downloaden via git clone..."
     rm -rf ~/klonkt-node
     git clone roboburr@91.98.142.161:/home/roboburr/apps/klonkt-demo ~/klonkt-node
 fi
