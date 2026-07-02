@@ -18,7 +18,6 @@ import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -40,7 +39,6 @@ class MainActivity : Activity() {
     private val PREFS_NAME = "klonkt_prefs"
     private val KEY_PORT = "server_port"
     private val KEY_COMMAND = "termux_command"
-    private val KEY_AUTO_START = "auto_start"
     private val KEY_FILES_COPIED = "files_copied"
 
     private val DEFAULT_COMMAND = "termux-wake-lock && cd ~/klonkt-node && npm run start & ssh -R 80:localhost:3020 a.pinggy.io"
@@ -353,12 +351,7 @@ class MainActivity : Activity() {
             }
         }
 
-        // Start Server in Termux if configured to auto-start
-        if (getSavedAutoStart()) {
-            startServerInTermux()
-        }
-
-        // Start polling and loading
+        // Start polling and loading directly (auto-start is removed to prevent background start errors on Android 14+)
         startPollingThread()
     }
 
@@ -376,18 +369,11 @@ class MainActivity : Activity() {
         return prefs.getString(KEY_COMMAND, DEFAULT_COMMAND) ?: DEFAULT_COMMAND
     }
 
-    private fun getSavedAutoStart(): Boolean {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        // Default changed to false to avoid automatic RUN_COMMAND intents on Android 14+ startup
-        return prefs.getBoolean(KEY_AUTO_START, false)
-    }
-
-    private fun saveSettings(port: String, command: String, autoStart: Boolean) {
+    private fun saveSettings(port: String, command: String) {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val editor = prefs.edit()
         editor.putString(KEY_PORT, port)
         editor.putString(KEY_COMMAND, command)
-        editor.putBoolean(KEY_AUTO_START, autoStart)
         editor.apply()
     }
 
@@ -450,7 +436,8 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Termux-commando verzonden...", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(this, "Kon Termux-service niet starten: ${e.message}", Toast.LENGTH_LONG).show()
+            // Do not show system exception log to user; show a helpful manual startup message instead
+            Toast.makeText(this, "Android blokkeert automatisch opstarten. Start de server handmatig in Termux.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -462,10 +449,6 @@ class MainActivity : Activity() {
             setColor(Color.parseColor("#FFC107"))
         }
         statusLabel.text = "BOOTING"
-
-        if (getSavedAutoStart()) {
-            startServerInTermux()
-        }
 
         startPollingThread()
     }
@@ -528,7 +511,7 @@ class MainActivity : Activity() {
                                 "Zorg ervoor dat:\n" +
                                 "1. Termux is geïnstalleerd en draait.\n" +
                                 "2. Klonkt is geïnstalleerd in Termux (`~/klonkt-node`).\n" +
-                                "3. 'Allow external apps' aan staat in `~/.termux/termux.properties`."
+                                "3. De Node.js server draait via `npm start`."
                     }
                 }
             }
@@ -573,25 +556,16 @@ class MainActivity : Activity() {
         }
         container.addView(commandInput)
 
-        val autoStartCheckbox = CheckBox(this).apply {
-            text = "Start Termux bij openen app"
-            setTextColor(Color.WHITE)
-            isChecked = getSavedAutoStart()
-            setPadding(0, dpToPx(12), 0, 0)
-        }
-        container.addView(autoStartCheckbox)
-
         builder.setView(container)
 
         builder.setPositiveButton("Opslaan") { _, _ ->
             val newPort = portInput.text.toString().trim()
             val newCommand = commandInput.text.toString().trim()
-            val newAutoStart = autoStartCheckbox.isChecked
 
             if (newPort.isEmpty() || newCommand.isEmpty()) {
                 Toast.makeText(this, "Velden mogen niet leeg zijn", Toast.LENGTH_SHORT).show()
             } else {
-                saveSettings(newPort, newCommand, newAutoStart)
+                saveSettings(newPort, newCommand)
                 Toast.makeText(this, "Instellingen opgeslagen", Toast.LENGTH_SHORT).show()
                 restartAppLogic()
             }
