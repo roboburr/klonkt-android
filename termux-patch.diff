@@ -1,5 +1,5 @@
 diff --git a/app/src/main/java/com/termux/app/TermuxActivity.java b/app/src/main/java/com/termux/app/TermuxActivity.java
-index 0c9f741..cc00607 100644
+index 0c9f741..98e921c 100644
 --- a/app/src/main/java/com/termux/app/TermuxActivity.java
 +++ b/app/src/main/java/com/termux/app/TermuxActivity.java
 @@ -250,6 +250,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
@@ -26,7 +26,7 @@ index 0c9f741..cc00607 100644
                          mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
                      } catch (WindowManager.BadTokenException e) {
                          // Activity finished - ignore.
-@@ -428,6 +438,145 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
+@@ -428,6 +438,140 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
          // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
          mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
      }
@@ -134,22 +134,17 @@ index 0c9f741..cc00607 100644
 +            webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
 +            final String kurl = "http://localhost:3020";
 +            final android.os.Handler kh = new android.os.Handler(android.os.Looper.getMainLooper());
-+            final boolean[] splashShown = { false };
 +            webView.setWebViewClient(new android.webkit.WebViewClient() {
 +                @Override
-+                public void onPageFinished(android.webkit.WebView view, String url) {
-+                    if (url != null && url.startsWith(kurl)) splashShown[0] = false;
-+                }
-+                @Override
 +                public void onReceivedError(android.webkit.WebView view, int errorCode, String description, String failingUrl) {
-+                    if (!splashShown[0]) {
-+                        splashShown[0] = true;
-+                        view.loadDataWithBaseURL(null, KLONKT_SPLASH, "text/html", "utf-8", null);
-+                    }
++                    // Only react when the MAIN page fails (ignore a missing subresource on a
++                    // working page), and never leave the raw browser error page standing:
++                    // always swap back to the splash, then retry until the server answers.
++                    if (failingUrl != null && !failingUrl.equals(kurl) && !failingUrl.equals(kurl + "/")) return;
++                    view.loadDataWithBaseURL(null, KLONKT_SPLASH, "text/html", "utf-8", null);
 +                    kh.postDelayed(new Runnable() { public void run() { view.loadUrl(kurl); } }, 4000);
 +                }
 +            });
-+            splashShown[0] = true;
 +            webView.loadDataWithBaseURL(null, KLONKT_SPLASH, "text/html", "utf-8", null);
 +            kh.postDelayed(new Runnable() { public void run() { webView.loadUrl(kurl); } }, 2500);
 +            
