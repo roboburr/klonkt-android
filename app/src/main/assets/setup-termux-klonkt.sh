@@ -60,7 +60,7 @@ cat << 'EOF' > ~/.termux/boot/start-klonkt.sh
 termux-wake-lock
 cd ~/klonkt-node
 npm run start &
-ssh -R 80:localhost:3020 a.pinggy.io
+ssh -p 443 -o StrictHostKeyChecking=accept-new -R0:localhost:3020 a.pinggy.io
 EOF
 chmod +x ~/.termux/boot/start-klonkt.sh
 echo "Termux:Boot startscript aangemaakt in ~/.termux/boot/start-klonkt.sh"

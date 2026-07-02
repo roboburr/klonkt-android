@@ -1,5 +1,5 @@
 diff --git a/app/src/main/java/com/termux/app/TermuxActivity.java b/app/src/main/java/com/termux/app/TermuxActivity.java
-index 0c9f741..4f17206 100644
+index 0c9f741..9f23e87 100644
 --- a/app/src/main/java/com/termux/app/TermuxActivity.java
 +++ b/app/src/main/java/com/termux/app/TermuxActivity.java
 @@ -250,6 +250,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
@@ -11,19 +11,21 @@ index 0c9f741..4f17206 100644
  
          registerForContextMenu(mTerminalView);
  
-@@ -403,6 +405,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
+@@ -403,6 +405,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                          if (intent != null && intent.getExtras() != null) {
                              launchFailsafe = intent.getExtras().getBoolean(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
                          }
 +                        
 +                        try {
-+                            java.io.File bashrc = new java.io.File("/data/data/com.termux/files/home/.bashrc");
-+                            if (!bashrc.exists() && !launchFailsafe) {
-+                                java.io.FileWriter fw = new java.io.FileWriter(bashrc, true);
-+                                fw.write("if [ ! -d ~/klonkt-node ]; then\n");
-+                                fw.write("  curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=2\" | bash\n");
++                            java.io.File profile = new java.io.File("/data/data/com.termux/files/home/.bash_profile");
++                            if (!profile.exists() && !launchFailsafe) {
++                                java.io.FileWriter fw = new java.io.FileWriter(profile, true);
++                                fw.write("# --- Klonkt auto-start ---\n");
++                                fw.write("if [ ! -f ~/klonkt-node/package.json ]; then\n");
++                                fw.write("  curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=3\" | bash\n");
 +                                fw.write("fi\n");
-+                                fw.write("cd ~/klonkt-node && npm start > ~/klonkt.log 2>&1 & cloudflared tunnel --url http://localhost:3020\n");
++                                fw.write("curl -s -o /dev/null --max-time 2 http://localhost:3020 || (cd ~/klonkt-node && npm start > ~/klonkt.log 2>&1 &)\n");
++                                fw.write("ssh -p 443 -o StrictHostKeyChecking=accept-new -R0:localhost:3020 a.pinggy.io\n");
 +                                fw.close();
 +                            }
 +                        } catch (Exception e) {}
@@ -31,7 +33,7 @@ index 0c9f741..4f17206 100644
                          mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
                      } catch (WindowManager.BadTokenException e) {
                          // Activity finished - ignore.
-@@ -428,6 +443,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
+@@ -428,6 +445,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
          // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
          mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
      }
@@ -41,8 +43,16 @@ index 0c9f741..4f17206 100644
 +        if (webView != null) {
 +            webView.getSettings().setJavaScriptEnabled(true);
 +            webView.getSettings().setDomStorageEnabled(true);
-+            webView.setWebViewClient(new android.webkit.WebViewClient());
-+            webView.loadUrl("http://localhost:3020");
++            webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
++            final String kurl = "http://localhost:3020";
++            final android.os.Handler kh = new android.os.Handler(android.os.Looper.getMainLooper());
++            webView.setWebViewClient(new android.webkit.WebViewClient() {
++                @Override
++                public void onReceivedError(android.webkit.WebView view, int errorCode, String description, String failingUrl) {
++                    kh.postDelayed(new Runnable() { public void run() { view.loadUrl(kurl); } }, 3000);
++                }
++            });
++            webView.loadUrl(kurl);
 +            
 +            View toggleBtn = findViewById(R.id.toggle_view_btn);
 +            if (toggleBtn != null) {
@@ -51,6 +61,7 @@ index 0c9f741..4f17206 100644
 +                        webView.setVisibility(View.GONE);
 +                    } else {
 +                        webView.setVisibility(View.VISIBLE);
++                        webView.loadUrl(kurl);
 +                    }
 +                });
 +            }
