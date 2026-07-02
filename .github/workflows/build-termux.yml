@@ -1,0 +1,41 @@
+name: Build Custom Termux APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout klonkt-android
+        uses: actions/checkout@v4
+        with:
+          path: klonkt-android
+          
+      - name: Clone Termux
+        run: git clone --depth 1 https://github.com/termux/termux-app.git termux-app
+        
+      - name: Apply Klonkt Patch
+        run: |
+          cd termux-app
+          git apply ../klonkt-android/termux-patch.diff
+          
+      - name: Setup java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          
+      - name: Build APKs
+        run: |
+          cd termux-app
+          ./gradlew assembleDebug
+          
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: termux-app-klonkt-hybrid
+          path: termux-app/app/build/outputs/apk/debug/app-universal-debug.apk
