@@ -263,7 +263,7 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             textSize = 15f
             gravity = Gravity.CENTER
-            lineSpacingMultiplier = 1.2f
+            setLineSpacing(0f, 1.2f)
             setPadding(0, 0, 0, dpToPx(32))
         }
         dashboardOverlay.addView(statusText)
@@ -352,12 +352,11 @@ class MainActivity : Activity() {
 
     private fun saveSettings(port: String, command: String, autoStart: Boolean) {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().apply {
-            putString(KEY_PORT, port)
-            putString(KEY_COMMAND, command)
-            putBoolean(KEY_AUTO_START, autoStart)
-            apply()
-        }
+        val editor = prefs.edit()
+        editor.putString(KEY_PORT, port)
+        editor.putString(KEY_COMMAND, command)
+        editor.putBoolean(KEY_AUTO_START, autoStart)
+        editor.apply()
     }
 
     private fun startServerInTermux() {
@@ -508,12 +507,11 @@ class MainActivity : Activity() {
 
             if (newPort.isEmpty() || newCommand.isEmpty()) {
                 Toast.makeText(this, "Velden mogen niet leeg zijn", Toast.LENGTH_SHORT).show()
-                return@setPositiveButton
+            } else {
+                saveSettings(newPort, newCommand, newAutoStart)
+                Toast.makeText(this, "Instellingen opgeslagen", Toast.LENGTH_SHORT).show()
+                restartAppLogic()
             }
-
-            saveSettings(newPort, newCommand, newAutoStart)
-            Toast.makeText(this, "Instellingen opgeslagen", Toast.LENGTH_SHORT).show()
-            restartAppLogic()
         }
 
         builder.setNegativeButton("Annuleren") { dialog, _ ->
