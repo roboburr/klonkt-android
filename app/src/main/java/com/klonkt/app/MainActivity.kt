@@ -407,22 +407,37 @@ class MainActivity : Activity() {
         thread {
             var connected = false
             var attempts = 0
-            val url = URL("http://127.0.0.1:$port")
             
-            while (!connected && attempts < 35 && sessionId == pollingSessionId) {
-                try {
-                    val connection = url.openConnection() as HttpURLConnection
-                    connection.connectTimeout = 1000
-                    connection.readTimeout = 1000
-                    connection.requestMethod = "GET"
-                    val responseCode = connection.responseCode
-                    if (responseCode == 200 || responseCode == 302 || responseCode == 404) {
+            try {
+                val url = URL("http://127.0.0.1:$port")
+                while (!connected && attempts < 35 && sessionId == pollingSessionId) {
+                    var connection: HttpURLConnection? = null
+                    try {
+                        connection = url.openConnection() as HttpURLConnection
+                        connection.connectTimeout = 1000
+                        connection.readTimeout = 1000
+                        connection.requestMethod = "GET"
+                        
+                        // Fetching response code verifies socket is open & listening
+                        val responseCode = connection.responseCode
                         connected = true
+                    } catch (t: Throwable) {
+                        // Offline or connection refused
+                    } finally {
+                        connection?.disconnect() // Critical: prevent resource leaks and hangs
                     }
-                } catch (e: Exception) {
-                    attempts++
-                    Thread.sleep(1500)
+                    
+                    if (!connected && sessionId == pollingSessionId) {
+                        attempts++
+                        try {
+                            Thread.sleep(1500)
+                        } catch (ie: InterruptedException) {
+                            break
+                        }
+                    }
                 }
+            } catch (t: Throwable) {
+                t.printStackTrace()
             }
             
             if (sessionId == pollingSessionId) {
