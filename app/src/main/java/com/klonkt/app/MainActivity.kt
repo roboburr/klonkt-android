@@ -20,11 +20,11 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.CheckBox
 import android.widget.EditText
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.FrameLayout
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
@@ -324,21 +324,26 @@ class MainActivity : Activity() {
         rootLayout.addView(contentFrame)
         setContentView(rootLayout)
 
-        // Trigger copying of offline installation files if not already done
+        // Trigger copying of offline installation ZIP and script to Downloads folder if not already present
         thread {
             try {
-                val destFolder = java.io.File("/storage/emulated/0/Download/klonkt-node")
-                if (!destFolder.exists()) {
+                val downloadsFolder = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                val destZip = java.io.File(downloadsFolder, "klonkt-node.zip")
+                val destScript = java.io.File(downloadsFolder, "setup-termux-klonkt.sh")
+                
+                if (!destZip.exists() || !destScript.exists()) {
                     runOnUiThread {
                         statusText.text = "Klonkt installatiebestanden kopiëren naar Download map..."
                     }
-                    val success = copyAssetFolder(assets, "klonkt-node", destFolder.absolutePath)
+                    val successZip = copyAssetToDownloads(this@MainActivity, "klonkt-node.zip", "application/zip")
+                    val successScript = copyAssetToDownloads(this@MainActivity, "setup-termux-klonkt.sh", "application/x-sh")
+                    
                     runOnUiThread {
-                        if (success) {
-                            Toast.makeText(this@MainActivity, "Installatiebestanden gekopieerd naar Download/klonkt-node!", Toast.LENGTH_LONG).show()
+                        if (successZip && successScript) {
+                            Toast.makeText(this@MainActivity, "Bestanden gekopieerd naar Download map!", Toast.LENGTH_LONG).show()
                             restartAppLogic()
                         } else {
-                            Toast.makeText(this@MainActivity, "Kopiëren mislukt. Zorg voor schrijfrechten in Downloads.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this@MainActivity, "Kopiëren mislukt. Zorg voor opslagtoegang.", Toast.LENGTH_LONG).show()
                         }
                     }
                 }
@@ -384,23 +389,34 @@ class MainActivity : Activity() {
         editor.apply()
     }
 
-    private fun copyAssetFolder(assetManager: android.content.res.AssetManager, assetPath: String, destPath: String): Boolean {
+    private fun copyAssetToDownloads(context: Context, assetFileName: String, mimeType: String): Boolean {
         try {
-            val files = assetManager.list(assetPath) ?: return false
-            if (files.isEmpty()) {
-                val destFile = java.io.File(destPath)
-                destFile.parentFile?.mkdirs()
-                assetManager.open(assetPath).use { input ->
-                    java.io.FileOutputStream(destFile).use { output ->
-                        input.copyTo(output)
-                    }
+            val resolver = context.contentResolver
+            
+            // Delete existing duplicate file to keep it clean
+            val projection = arrayOf(android.provider.MediaStore.MediaColumns._ID)
+            val selection = "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} = ?"
+            val selectionArgs = arrayOf(assetFileName)
+            val queryUri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            
+            resolver.query(queryUri, projection, selection, selectionArgs, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID))
+                    val deleteUri = android.content.ContentUris.withAppendedId(queryUri, id)
+                    resolver.delete(deleteUri, null, null)
                 }
-            } else {
-                val folder = java.io.File(destPath)
-                folder.mkdirs()
-                for (file in files) {
-                    val subAssetPath = if (assetPath.isEmpty()) file else "$assetPath/$file"
-                    copyAssetFolder(assetManager, subAssetPath, "$destPath/$file")
+            }
+
+            val contentValues = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, assetFileName)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+            }
+
+            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues) ?: return false
+            resolver.openOutputStream(uri)?.use { outputStream ->
+                context.assets.open(assetFileName).use { inputStream ->
+                    inputStream.copyTo(outputStream)
                 }
             }
             return true
