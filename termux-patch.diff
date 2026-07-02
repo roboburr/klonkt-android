@@ -45,7 +45,7 @@ index 0c9f741..98e921c 100644
 +            fw.write("if [ ! -f ~/klonkt-node/package.json ]; then\n");
 +            fw.write("  curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=5\" | bash\n");
 +            fw.write("fi\n");
-+            fw.write("curl -s -o /dev/null --max-time 2 http://localhost:3020 || (cd ~/klonkt-node && npm start > ~/klonkt.log 2>&1 &)\n");
++            fw.write("curl -s -o /dev/null --max-time 2 http://localhost:3020 || (cd ~/klonkt-node && PORT=3020 HOST=127.0.0.1 npm start > ~/klonkt.log 2>&1 &)\n");
 +            fw.write("command -v cloudflared >/dev/null 2>&1 || pkg install -y cloudflared\n");
 +            fw.write("if [ -s \"$HOME/.klonkt-tunnel-token\" ]; then GODEBUG=netdns=cgo cloudflared tunnel --no-autoupdate --edge-ip-version 4 run --token \"$(cat \"$HOME/.klonkt-tunnel-token\")\"; else GODEBUG=netdns=cgo cloudflared tunnel --no-autoupdate --edge-ip-version 4 --url http://localhost:3020; fi\n");
 +            fw.close();
