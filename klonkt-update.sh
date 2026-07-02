@@ -8,9 +8,14 @@ cd "$HOME"
 echo "[Klonkt] Nieuwste versie downloaden..."
 curl -fL --retry 3 -o klonkt-upd.tar.gz "https://github.com/roboburr/klonkt-android/releases/download/termux-latest/klonkt-node-arm64.tar.gz"
 rm -rf klonkt-upd && mkdir klonkt-upd
-tar -xzf klonkt-upd.tar.gz -C klonkt-upd
+# Android forbids hard links; gyp's build intermediates in the tarball are
+# hard-linked junk (obj.target/*, *.a) and make tar exit non-zero even though
+# everything that matters extracted fine. Tolerate that, then hard-verify the
+# essentials below.
+tar -xzf klonkt-upd.tar.gz -C klonkt-upd 2>/dev/null || true
 rm -f klonkt-upd.tar.gz
-if [ ! -f klonkt-upd/klonkt-node/package.json ]; then
+if [ ! -f klonkt-upd/klonkt-node/package.json ] || [ ! -f klonkt-upd/klonkt-node/src/server.js ] \
+   || [ ! -f klonkt-upd/klonkt-node/node_modules/better-sqlite3/build/Release/better_sqlite3.node ]; then
     echo "[Klonkt] Download onvolledig - update afgebroken (niets veranderd)."
     exit 1
 fi

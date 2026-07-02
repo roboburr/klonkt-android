@@ -55,8 +55,17 @@ else
   echo "ERROR: server failed to boot:"; cat $HOME/kboot/boot.log; exit 1
 fi
 
-# 4) Assemble both artifacts
-tar -czf /repo/klonkt-node-arm64.tar.gz -C "$HOME" klonkt-node
+# 4) Strip gyp's hard-linked build intermediates (obj.target/*, *.a): Android
+#    forbids hard links, so extracting them on a phone fails - and they're
+#    build junk anyway (only build/Release/*.node is used at runtime).
+find node_modules -type d -name obj.target -prune -exec rm -rf {} + 2>/dev/null || true
+find node_modules -name "*.a" -delete 2>/dev/null || true
+
+# 5) Assemble both artifacts (hard-dereference as belt-and-braces) + guard
+tar --hard-dereference -czf /repo/klonkt-node-arm64.tar.gz -C "$HOME" klonkt-node
+if tar -tvf /repo/klonkt-node-arm64.tar.gz | grep -q " link to "; then
+  echo "ERROR: tarball still contains hard links"; exit 1
+fi
 cp -r "$HOME/klonkt-node" /repo/bundle/klonkt-node
-tar -czf /repo/klonkt-bundle.tar.gz -C /repo/bundle debs klonkt-node
+tar --hard-dereference -czf /repo/klonkt-bundle.tar.gz -C /repo/bundle debs klonkt-node
 echo "bundle: $(du -h /repo/klonkt-bundle.tar.gz | cut -f1)  node-tar: $(du -h /repo/klonkt-node-arm64.tar.gz | cut -f1)"
