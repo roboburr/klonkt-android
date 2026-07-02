@@ -1,5 +1,5 @@
 diff --git a/app/src/main/java/com/termux/app/TermuxActivity.java b/app/src/main/java/com/termux/app/TermuxActivity.java
-index 0c9f741..391413c 100644
+index 0c9f741..b5db87d 100644
 --- a/app/src/main/java/com/termux/app/TermuxActivity.java
 +++ b/app/src/main/java/com/termux/app/TermuxActivity.java
 @@ -403,6 +403,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
@@ -16,7 +16,7 @@ index 0c9f741..391413c 100644
                          mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
                      } catch (WindowManager.BadTokenException e) {
                          // Activity finished - ignore.
-@@ -429,6 +436,110 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
+@@ -429,6 +436,126 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
          mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
      }
  
@@ -56,7 +56,8 @@ index 0c9f741..391413c 100644
 +            java.io.File start = new java.io.File(home, ".klonkt-start.sh");
 +            java.io.FileWriter fw = new java.io.FileWriter(start, false);
 +            fw.write("#!/data/data/com.termux/files/usr/bin/bash\n");
-+            fw.write("# KLONKT_V8\n");
++            fw.write("# KLONKT_V9\n");
++            fw.write("command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock\n");
 +            fw.write("command -v flock >/dev/null 2>&1 && { exec 9>\"$HOME/.klonkt.lock\"; flock -n 9 || exit 0; }\n");
 +            fw.write("if [ ! -f ~/klonkt-node/package.json ]; then\n");
 +            fw.write("  echo \"[Klonkt] Eerste keer: installatie starten...\"\n");
@@ -71,24 +72,39 @@ index 0c9f741..391413c 100644
 +            fw.write("    rm -rf ~/klonkt-bundle ~/klonkt-bundle.tar.gz\n");
 +            fw.write("  else\n");
 +            fw.write("    echo \"[Klonkt] Bundel niet gevonden - online installatie...\"\n");
-+            fw.write("    curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=8\" | bash\n");
++            fw.write("    curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=9\" | bash\n");
 +            fw.write("  fi\n");
 +            fw.write("fi\n");
 +            fw.write("if [ ! -x \"$PREFIX/bin/klonkt-token\" ]; then\n");
-+            fw.write("  printf '%s\\n' '#!/data/data/com.termux/files/usr/bin/bash' 'if [ -z \"$1\" ]; then echo \"Gebruik: klonkt-token <token>  (of: klonkt-token clear)\"; exit 1; fi' 'if [ \"$1\" = clear ]; then rm -f ~/.klonkt-tunnel-token; echo \"Token gewist. Herstart de app.\"; exit 0; fi' 'printf %s \"$1\" > ~/.klonkt-tunnel-token' 'echo \"Token opgeslagen. Herstart de app.\"' > \"$PREFIX/bin/klonkt-token\"\n");
++            fw.write("  printf '%s\\n' '#!/data/data/com.termux/files/usr/bin/bash' 'if [ -z \"$1\" ]; then echo \"Gebruik: klonkt-token <token>  (of: klonkt-token clear)\"; exit 1; fi' 'if [ \"$1\" = clear ]; then rm -f ~/.klonkt-tunnel-token; echo \"Token gewist. Herstart de app.\"; exit 0; fi' 'printf %s \"$1\" > ~/.klonkt-tunnel-token' 'echo \"Token opgeslagen. Herstart de app of draai: bash ~/.klonkt-start.sh\"' > \"$PREFIX/bin/klonkt-token\"\n");
 +            fw.write("  chmod +x \"$PREFIX/bin/klonkt-token\"\n");
 +            fw.write("fi\n");
 +            fw.write("mkdir -p ~/.termux/boot\n");
 +            fw.write("printf '%s\\n' '#!/data/data/com.termux/files/usr/bin/sh' 'termux-wake-lock' '[ -f ~/.klonkt-start.sh ] && bash ~/.klonkt-start.sh' > ~/.termux/boot/start-klonkt.sh\n");
 +            fw.write("chmod +x ~/.termux/boot/start-klonkt.sh\n");
 +            fw.write("curl -s -o /dev/null --max-time 2 http://localhost:3020 || (cd ~/klonkt-node && PORT=3020 HOST=127.0.0.1 npm start > ~/klonkt.log 2>&1 &)\n");
-+            fw.write("echo \"\"\n");
-+            fw.write("echo \"[Klonkt] Server draait zo op:  http://localhost:3020\"\n");
-+            fw.write("echo \"[Klonkt] Open dat adres in je browser (Chrome).\"\n");
-+            fw.write("echo \"[Klonkt] Eigen domein? Zet je Cloudflare-token met:  klonkt-token <token>\"\n");
-+            fw.write("echo \"[Klonkt] Tunnel starten...\"\n");
 +            fw.write("command -v cloudflared >/dev/null 2>&1 || pkg install -y cloudflared\n");
-+            fw.write("if [ -s \"$HOME/.klonkt-tunnel-token\" ]; then GODEBUG=netdns=cgo cloudflared tunnel --no-autoupdate --edge-ip-version 4 run --token \"$(cat \"$HOME/.klonkt-tunnel-token\")\"; else GODEBUG=netdns=cgo cloudflared tunnel --no-autoupdate --edge-ip-version 4 --url http://localhost:3020; fi\n");
++            fw.write("if ! pgrep -f \"cloudflared tunnel\" >/dev/null 2>&1; then\n");
++            fw.write("  echo \"[Klonkt] Tunnel starten...\"\n");
++            fw.write("  if [ -s \"$HOME/.klonkt-tunnel-token\" ]; then\n");
++            fw.write("    (GODEBUG=netdns=cgo nohup cloudflared tunnel --no-autoupdate --edge-ip-version 4 run --token \"$(cat \"$HOME/.klonkt-tunnel-token\")\" > ~/.klonkt-tunnel.log 2>&1 &)\n");
++            fw.write("  else\n");
++            fw.write("    (GODEBUG=netdns=cgo nohup cloudflared tunnel --no-autoupdate --edge-ip-version 4 --url http://localhost:3020 > ~/.klonkt-tunnel.log 2>&1 &)\n");
++            fw.write("  fi\n");
++            fw.write("fi\n");
++            fw.write("i=0; KURL=\"\"\n");
++            fw.write("while [ $i -lt 30 ]; do\n");
++            fw.write("  KURL=$(grep -oE 'https://[a-z0-9-]+\\.trycloudflare\\.com' ~/.klonkt-tunnel.log 2>/dev/null | head -1)\n");
++            fw.write("  [ -n \"$KURL\" ] && break\n");
++            fw.write("  grep -q \"Registered tunnel connection\" ~/.klonkt-tunnel.log 2>/dev/null && break\n");
++            fw.write("  sleep 1; i=$((i+1))\n");
++            fw.write("done\n");
++            fw.write("echo \"\"\n");
++            fw.write("echo \"==============================================\"\n");
++            fw.write("echo \"[Klonkt] Lokaal:   http://localhost:3020  (open in je browser)\"\n");
++            fw.write("if [ -n \"$KURL\" ]; then echo \"[Klonkt] Publiek:  $KURL\"; elif grep -q \"Registered tunnel connection\" ~/.klonkt-tunnel.log 2>/dev/null; then echo \"[Klonkt] Publiek:  je eigen domein is live (token-tunnel).\"; else echo \"[Klonkt] Tunnel nog niet verbonden - check: tail ~/.klonkt-tunnel.log\"; fi\n");
++            fw.write("echo \"[Klonkt] Eigen domein instellen:  klonkt-token <token>\"\n");
++            fw.write("echo \"==============================================\"\n");
 +            fw.close();
 +            String hook = "[ -f ~/.klonkt-start.sh ] && bash ~/.klonkt-start.sh\n";
 +            klonktAppendIfMissing(new java.io.File(home, ".bash_profile"), hook);

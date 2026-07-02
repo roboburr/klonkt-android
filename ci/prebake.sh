@@ -14,8 +14,11 @@ yes | pkg update >/dev/null 2>&1 || true
 #    apt archive cache holds every .deb a fresh phone needs.
 apt-get install --download-only -y nodejs-lts ffmpeg cloudflared
 mkdir -p /repo/bundle/debs
-cp /data/data/com.termux/files/usr/var/cache/apt/archives/*.deb /repo/bundle/debs/
-ls /repo/bundle/debs/ | head -30
+# apt's archive dir varies in termux-docker - just find every downloaded .deb
+find /data/data/com.termux -name "*.deb" -exec cp {} /repo/bundle/debs/ \;
+DEBS=$(ls /repo/bundle/debs/ | wc -l)
+echo "collected $DEBS debs"
+[ "$DEBS" -gt 10 ] || { echo "ERROR: deb closure missing"; exit 1; }
 
 # 2) Build klonkt-node with node_modules (compilers only exist here, never on phones)
 pkg install -y nodejs-lts python build-essential git
