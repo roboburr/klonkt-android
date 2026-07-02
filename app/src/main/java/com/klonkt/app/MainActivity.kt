@@ -41,6 +41,7 @@ class MainActivity : Activity() {
     private val KEY_PORT = "server_port"
     private val KEY_COMMAND = "termux_command"
     private val KEY_AUTO_START = "auto_start"
+    private val KEY_FILES_COPIED = "files_copied"
 
     private val DEFAULT_COMMAND = "termux-wake-lock && cd ~/klonkt-node && npm run start & ssh -R 80:localhost:3020 a.pinggy.io"
 
@@ -324,14 +325,13 @@ class MainActivity : Activity() {
         rootLayout.addView(contentFrame)
         setContentView(rootLayout)
 
-        // Trigger copying of offline installation ZIP and script to Downloads folder if not already present
+        // Trigger copying of offline installation ZIP and script using SharedPreferences flag
         thread {
             try {
-                val downloadsFolder = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                val destZip = java.io.File(downloadsFolder, "klonkt-node.zip")
-                val destScript = java.io.File(downloadsFolder, "setup-termux-klonkt.sh")
+                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val filesCopied = prefs.getBoolean(KEY_FILES_COPIED, false)
                 
-                if (!destZip.exists() || !destScript.exists()) {
+                if (!filesCopied) {
                     runOnUiThread {
                         statusText.text = "Klonkt installatiebestanden kopiëren naar Download map..."
                     }
@@ -340,6 +340,7 @@ class MainActivity : Activity() {
                     
                     runOnUiThread {
                         if (successZip && successScript) {
+                            prefs.edit().putBoolean(KEY_FILES_COPIED, true).apply()
                             Toast.makeText(this@MainActivity, "Bestanden gekopieerd naar Download map!", Toast.LENGTH_LONG).show()
                             restartAppLogic()
                         } else {
