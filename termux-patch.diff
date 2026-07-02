@@ -1,5 +1,5 @@
 diff --git a/app/src/main/java/com/termux/app/TermuxActivity.java b/app/src/main/java/com/termux/app/TermuxActivity.java
-index 0c9f741..9f23e87 100644
+index 0c9f741..47f3f96 100644
 --- a/app/src/main/java/com/termux/app/TermuxActivity.java
 +++ b/app/src/main/java/com/termux/app/TermuxActivity.java
 @@ -250,6 +250,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
@@ -11,34 +11,79 @@ index 0c9f741..9f23e87 100644
  
          registerForContextMenu(mTerminalView);
  
-@@ -403,6 +405,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
+@@ -403,6 +405,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                          if (intent != null && intent.getExtras() != null) {
                              launchFailsafe = intent.getExtras().getBoolean(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
                          }
 +                        
-+                        try {
-+                            java.io.File profile = new java.io.File("/data/data/com.termux/files/home/.bash_profile");
-+                            if (!profile.exists() && !launchFailsafe) {
-+                                java.io.FileWriter fw = new java.io.FileWriter(profile, true);
-+                                fw.write("# --- Klonkt auto-start ---\n");
-+                                fw.write("if [ ! -f ~/klonkt-node/package.json ]; then\n");
-+                                fw.write("  curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=3\" | bash\n");
-+                                fw.write("fi\n");
-+                                fw.write("curl -s -o /dev/null --max-time 2 http://localhost:3020 || (cd ~/klonkt-node && npm start > ~/klonkt.log 2>&1 &)\n");
-+                                fw.write("ssh -p 443 -o StrictHostKeyChecking=accept-new -R0:localhost:3020 a.pinggy.io\n");
-+                                fw.close();
-+                            }
-+                        } catch (Exception e) {}
++                        if (!launchFailsafe) {
++                            ensureKlonktBootstrap();
++                            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
++                                public void run() { klonktKickstart(); }
++                            }, 8000);
++                        }
 +                        
                          mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
                      } catch (WindowManager.BadTokenException e) {
                          // Activity finished - ignore.
-@@ -428,6 +445,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
+@@ -428,6 +438,88 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
          // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
          mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
      }
 +    
++    // Klonkt: write the start script + login-shell hooks. Idempotent (marker-based),
++    // never silently swallows failures, and works even on a half-finished install.
++    private void ensureKlonktBootstrap() {
++        try {
++            java.io.File home = new java.io.File("/data/data/com.termux/files/home");
++            if (!home.exists()) home.mkdirs();
++            java.io.File start = new java.io.File(home, ".klonkt-start.sh");
++            java.io.FileWriter fw = new java.io.FileWriter(start, false);
++            fw.write("#!/data/data/com.termux/files/usr/bin/bash\n");
++            fw.write("# KLONKT_V3\n");
++            fw.write("command -v flock >/dev/null 2>&1 && { exec 9>\"$HOME/.klonkt.lock\"; flock -n 9 || exit 0; }\n");
++            fw.write("if [ ! -f ~/klonkt-node/package.json ]; then\n");
++            fw.write("  curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=3\" | bash\n");
++            fw.write("fi\n");
++            fw.write("curl -s -o /dev/null --max-time 2 http://localhost:3020 || (cd ~/klonkt-node && npm start > ~/klonkt.log 2>&1 &)\n");
++            fw.write("ssh -p 443 -o StrictHostKeyChecking=accept-new -R0:localhost:3020 a.pinggy.io\n");
++            fw.close();
++            String hook = "[ -f ~/.klonkt-start.sh ] && bash ~/.klonkt-start.sh\n";
++            klonktAppendIfMissing(new java.io.File(home, ".bash_profile"), hook);
++            klonktAppendIfMissing(new java.io.File(home, ".profile"), hook);
++        } catch (Exception e) {
++            android.util.Log.e("Klonkt", "bootstrap write failed", e);
++        }
++    }
++
++    private void klonktAppendIfMissing(java.io.File f, String content) throws java.io.IOException {
++        if (f.exists()) {
++            java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(f));
++            try {
++                String line;
++                while ((line = r.readLine()) != null) if (line.contains(".klonkt-start.sh")) return;
++            } finally { r.close(); }
++        }
++        java.io.FileWriter w = new java.io.FileWriter(f, true);
++        w.write("\n# KLONKT_V3\n" + content);
++        w.close();
++    }
++
++    // Klonkt: type the start command straight into the shell. Belt-and-braces for
++    // any session that didn't source a profile; the flock in the script makes a
++    // double trigger harmless.
++    private void klonktKickstart() {
++        try {
++            if (mTermuxService == null || mTermuxService.getTermuxSessions().isEmpty()) return;
++            var ts = mTermuxService.getTermuxSessions().get(0).getTerminalSession();
++            if (ts != null && ts.isRunning()) ts.write("[ -f ~/.klonkt-start.sh ] && bash ~/.klonkt-start.sh\n");
++        } catch (Exception e) {
++            android.util.Log.e("Klonkt", "kickstart failed", e);
++        }
++    }
++
 +    private void setupKlonktWebView() {
++        ensureKlonktBootstrap();
 +        android.webkit.WebView webView = findViewById(R.id.klonkt_webview);
 +        if (webView != null) {
 +            webView.getSettings().setJavaScriptEnabled(true);
