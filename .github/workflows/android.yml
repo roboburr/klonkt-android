@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout Code
@@ -35,3 +37,13 @@ jobs:
       with:
         name: klonkt-debug-apk
         path: app/build/outputs/apk/debug/app-debug.apk
+
+    - name: Create Latest Release
+      uses: marvinpinto/action-automatic-releases@latest
+      with:
+        repo_token: "${{ secrets.GITHUB_TOKEN }}"
+        automatic_release_tag: "latest"
+        prerelease: true
+        title: "Latest Development Build"
+        files: |
+          app/build/outputs/apk/debug/app-debug.apk
