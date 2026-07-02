@@ -47,7 +47,7 @@ index 0c9f741..cc00607 100644
 +            fw.write("fi\n");
 +            fw.write("curl -s -o /dev/null --max-time 2 http://localhost:3020 || (cd ~/klonkt-node && npm start > ~/klonkt.log 2>&1 &)\n");
 +            fw.write("command -v cloudflared >/dev/null 2>&1 || pkg install -y cloudflared\n");
-+            fw.write("if [ -s \"$HOME/.klonkt-tunnel-token\" ]; then cloudflared tunnel run --token \"$(cat \"$HOME/.klonkt-tunnel-token\")\"; else cloudflared tunnel --url http://localhost:3020; fi\n");
++            fw.write("if [ -s \"$HOME/.klonkt-tunnel-token\" ]; then cloudflared tunnel --no-autoupdate --protocol http2 run --token \"$(cat \"$HOME/.klonkt-tunnel-token\")\"; else cloudflared tunnel --no-autoupdate --protocol http2 --url http://localhost:3020; fi\n");
 +            fw.close();
 +            String hook = "[ -f ~/.klonkt-start.sh ] && bash ~/.klonkt-start.sh\n";
 +            klonktAppendIfMissing(new java.io.File(home, ".bash_profile"), hook);
