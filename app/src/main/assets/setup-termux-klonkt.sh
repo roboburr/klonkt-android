@@ -4,7 +4,7 @@
 
 echo "=== 1. Termux Pakketten Updaten & Installeren ==="
 pkg update && pkg upgrade -y
-pkg install -y nodejs-lts python build-essential git openssh termux-api unzip ffmpeg
+pkg install -y nodejs-lts python build-essential git openssh termux-api unzip ffmpeg cloudflared
 
 echo "=== 2. Toegang voor Externe Apps (zoals de Klonkt App) Inschakelen ==="
 mkdir -p ~/.termux
@@ -60,7 +60,7 @@ cat << 'EOF' > ~/.termux/boot/start-klonkt.sh
 termux-wake-lock
 cd ~/klonkt-node
 npm run start &
-ssh -p 443 -o StrictHostKeyChecking=accept-new -R0:localhost:3020 a.pinggy.io
+cloudflared tunnel --url http://localhost:3020
 EOF
 chmod +x ~/.termux/boot/start-klonkt.sh
 echo "Termux:Boot startscript aangemaakt in ~/.termux/boot/start-klonkt.sh"

@@ -43,10 +43,10 @@ index 0c9f741..47f3f96 100644
 +            fw.write("# KLONKT_V3\n");
 +            fw.write("command -v flock >/dev/null 2>&1 && { exec 9>\"$HOME/.klonkt.lock\"; flock -n 9 || exit 0; }\n");
 +            fw.write("if [ ! -f ~/klonkt-node/package.json ]; then\n");
-+            fw.write("  curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=3\" | bash\n");
++            fw.write("  curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=4\" | bash\n");
 +            fw.write("fi\n");
 +            fw.write("curl -s -o /dev/null --max-time 2 http://localhost:3020 || (cd ~/klonkt-node && npm start > ~/klonkt.log 2>&1 &)\n");
-+            fw.write("ssh -p 443 -o StrictHostKeyChecking=accept-new -R0:localhost:3020 a.pinggy.io\n");
++            fw.write("command -v cloudflared >/dev/null 2>&1 || pkg install -y cloudflared; cloudflared tunnel --url http://localhost:3020\n");
 +            fw.close();
 +            String hook = "[ -f ~/.klonkt-start.sh ] && bash ~/.klonkt-start.sh\n";
 +            klonktAppendIfMissing(new java.io.File(home, ".bash_profile"), hook);
