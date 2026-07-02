@@ -406,6 +406,14 @@ class MainActivity : Activity() {
     }
 
     private fun startServerInTermux() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission("com.termux.permission.RUN_COMMAND") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf("com.termux.permission.RUN_COMMAND"), 100)
+                Toast.makeText(this, "Geef Klonkt aub toestemming en klik daarna nog een keer op START TERMUX", Toast.LENGTH_LONG).show()
+                return
+            }
+        }
+
         val port = getSavedPort()
         var command = getSavedCommand()
         
