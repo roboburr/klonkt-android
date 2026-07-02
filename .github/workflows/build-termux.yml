@@ -17,9 +17,15 @@ jobs:
         with:
           path: klonkt-android
 
-      # ── Prebaked klonkt-node (node_modules included, built for aarch64 termux) ──
-      # Cached on the klonkt-node source zip + prebake script, so the slow QEMU
-      # build only reruns when the app source actually changes.
+      # ── Prebaked klonkt-node: built from the klonkt STABLE branch (the same
+      #    release channel self-hosters run), adapted for Termux (system ffmpeg)
+      #    and with node_modules compiled for aarch64. Cached on the stable
+      #    commit + the prebake recipe, so the slow QEMU build only reruns when
+      #    a new Klonkt release lands or the recipe changes.
+      - name: Resolve klonkt stable commit
+        id: ksha
+        run: echo "sha=$(git ls-remote https://github.com/roboburr/klonkt.git refs/heads/stable | cut -f1)" >> "$GITHUB_OUTPUT"
+
       - name: Restore prebaked klonkt-node
         id: prebake-cache
         uses: actions/cache@v4
@@ -27,18 +33,17 @@ jobs:
           path: |
             klonkt-node-arm64.tar.gz
             klonkt-bundle.tar.gz
-          key: klonkt-bundle-${{ hashFiles('klonkt-android/app/src/main/assets/klonkt-node/**', 'klonkt-android/ci/prebake.sh') }}
+          key: klonkt-bundle-${{ steps.ksha.outputs.sha }}-${{ hashFiles('klonkt-android/ci/prebake.sh') }}
 
       - name: Set up QEMU
         if: steps.prebake-cache.outputs.cache-hit != 'true'
         uses: docker/setup-qemu-action@v3
 
-      - name: Prebake klonkt-node (aarch64 Termux)
+      - name: Prebake klonkt-node (aarch64 Termux, from klonkt@stable)
         if: steps.prebake-cache.outputs.cache-hit != 'true'
         run: |
-          # Use the git-tracked source dir; the .zip was made on Windows with
-          # backslash path separators and trips unzip (warning exit 1).
-          cp -r klonkt-android/app/src/main/assets/klonkt-node klonkt-android/klonkt-node-src
+          git clone --depth 1 --branch stable https://github.com/roboburr/klonkt.git klonkt-android/klonkt-node-src
+          echo "klonkt source: $(git -C klonkt-android/klonkt-node-src rev-parse HEAD)"
           chmod -R 777 klonkt-android
           docker run --rm -v "$PWD/klonkt-android:/repo" termux/termux-docker:aarch64 \
             /data/data/com.termux/files/usr/bin/bash /repo/ci/prebake.sh
@@ -86,7 +91,7 @@ jobs:
             echo "built:            $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "termux-app:       https://github.com/termux/termux-app @ $(git -C termux-app rev-parse HEAD)"
             echo "modification:     https://github.com/roboburr/klonkt-android @ ${GITHUB_SHA} (termux-patch.diff)"
-            echo "bundled server:   Klonkt (AGPL-3.0-or-later) — https://github.com/roboburr/klonkt"
+            echo "bundled server:   Klonkt (AGPL-3.0-or-later) — https://github.com/roboburr/klonkt @ ${{ steps.ksha.outputs.sha }} (stable)"
             echo "licenses:         see NOTICE.md and LICENSE in the klonkt-android repository"
           } > BUILD-INFO.txt
           cat BUILD-INFO.txt
