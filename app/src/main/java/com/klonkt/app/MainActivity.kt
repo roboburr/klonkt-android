@@ -1,11 +1,28 @@
 package com.klonkt.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
+import android.text.InputType
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.CheckBox
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import java.net.HttpURLConnection
@@ -15,105 +32,502 @@ import kotlin.concurrent.thread
 class MainActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var statusText: TextView
+    private lateinit var statusLight: View
+    private lateinit var statusLabel: TextView
+    private lateinit var dashboardOverlay: LinearLayout
+    private lateinit var progressBar: ProgressBar
+
+    private val PREFS_NAME = "klonkt_prefs"
+    private val KEY_PORT = "server_port"
+    private val KEY_COMMAND = "termux_command"
+    private val KEY_AUTO_START = "auto_start"
+
+    @Volatile
+    private var pollingSessionId = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Dynamic layout creation
-        val layout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            layoutParams = android.widget.LinearLayout.LayoutParams(
-                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                android.widget.LinearLayout.LayoutParams.MATCH_PARENT
+        // 1. Root Vertical Layout
+        val rootLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.parseColor("#121212"))
+        }
+
+        // 2. Toolbar Layout
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(56)
+            )
+            setBackgroundColor(Color.parseColor("#1E1E1E"))
+            setPadding(dpToPx(16), 0, dpToPx(16), 0)
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val appTitle = TextView(this).apply {
+            text = "Klonkt"
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        toolbar.addView(appTitle)
+
+        // Status Indicator Group
+        val statusGroup = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftMargin = dpToPx(16)
+            }
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        statusLight = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dpToPx(10), dpToPx(10))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#FFC107")) // Yellow/Orange by default (loading)
+            }
+        }
+        statusGroup.addView(statusLight)
+
+        statusLabel = TextView(this).apply {
+            text = "BOOTING"
+            setTextColor(Color.parseColor("#B0BEC5"))
+            textSize = 11f
+            setPadding(dpToPx(6), 0, 0, 0)
+        }
+        statusGroup.addView(statusLabel)
+        
+        toolbar.addView(statusGroup)
+
+        // Spacer to push buttons to the right
+        val spacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, 0, 1f)
+        }
+        toolbar.addView(spacer)
+
+        // Reload button
+        val reloadBtn = TextView(this).apply {
+            text = "RELOAD"
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6))
+            background = GradientDrawable().apply {
+                cornerRadius = dpToPx(4).toFloat()
+                setColor(Color.parseColor("#2C2C2C"))
+            }
+            setOnClickListener {
+                restartAppLogic()
+            }
+        }
+        toolbar.addView(reloadBtn)
+
+        // Spacer between buttons
+        val buttonSpacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dpToPx(8), ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        toolbar.addView(buttonSpacer)
+
+        // Settings button
+        val settingsBtn = TextView(this).apply {
+            text = "SETTINGS"
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6))
+            background = GradientDrawable().apply {
+                cornerRadius = dpToPx(4).toFloat()
+                setColor(Color.parseColor("#00ADB5"))
+            }
+            setOnClickListener {
+                showSettingsDialog()
+            }
+        }
+        toolbar.addView(settingsBtn)
+
+        rootLayout.addView(toolbar)
+
+        // 3. Content Frame Layout (WebView + Progress + Overlay)
+        val contentFrame = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
             )
         }
 
-        statusText = TextView(this).apply {
-            text = "Klonkt en Termux opstarten in de achtergrond..."
-            textSize = 16f
-            setPadding(30, 30, 30, 30)
-        }
-        layout.addView(statusText)
-
+        // WebView
         webView = WebView(this).apply {
-            layoutParams = android.widget.LinearLayout.LayoutParams(
-                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
             )
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    statusText.visibility = android.view.View.GONE
+                    progressBar.visibility = View.GONE
+                }
+
+                override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
+                    val port = getSavedPort()
+                    if (failingUrl?.contains("127.0.0.1:$port") == true || failingUrl?.contains("localhost:$port") == true) {
+                        runOnUiThread {
+                            dashboardOverlay.visibility = View.VISIBLE
+                            statusText.text = "WebView laadfout: $description\n\nIs de server gestopt?"
+                            statusLight.background = GradientDrawable().apply {
+                                shape = GradientDrawable.OVAL
+                                setColor(Color.parseColor("#F44336")) // Red
+                            }
+                            statusLabel.text = "OFFLINE"
+                        }
+                    }
+                }
+            }
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    super.onProgressChanged(view, newProgress)
+                    if (newProgress < 100) {
+                        progressBar.visibility = View.VISIBLE
+                        progressBar.progress = newProgress
+                    } else {
+                        progressBar.visibility = View.GONE
+                    }
                 }
             }
         }
-        layout.addView(webView)
+        contentFrame.addView(webView)
 
-        setContentView(layout)
-
-        // Start server in Termux (using external-apps permission)
-        startServerInTermux()
-
-        // Poll the local server and load WebView when ready
-        thread {
-            try {
-                waitForServer()
-                runOnUiThread {
-                    webView.loadUrl("http://127.0.0.1:3020")
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    statusText.text = "Kan geen verbinding maken met de Klonkt server.\n\n" +
-                            "Zorg ervoor dat:\n" +
-                            "1. Termux is geïnstalleerd.\n" +
-                            "2. Klonkt is geïnstalleerd in Termux (`~/klonkt-node`).\n" +
-                            "3. 'Allow external apps' aan staat in `~/.termux/termux.properties`."
-                }
+        // ProgressBar (Horizontal)
+        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(4)
+            ).apply {
+                gravity = Gravity.TOP
             }
+            max = 100
+            visibility = View.GONE
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                progressTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00ADB5"))
+            }
+        }
+        contentFrame.addView(progressBar)
+
+        // Dashboard Overlay
+        dashboardOverlay = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.parseColor("#121212"))
+            gravity = Gravity.CENTER
+            setPadding(dpToPx(32), dpToPx(32), dpToPx(32), dpToPx(32))
+        }
+
+        val overlayTitle = TextView(this).apply {
+            text = "Klonkt"
+            setTextColor(Color.parseColor("#00ADB5"))
+            textSize = 36f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dpToPx(24))
+        }
+        dashboardOverlay.addView(overlayTitle)
+
+        val spinner = ProgressBar(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(24)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00ADB5"))
+            }
+        }
+        dashboardOverlay.addView(spinner)
+
+        statusText = TextView(this).apply {
+            text = "Klonkt en Termux opstarten in de achtergrond..."
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            gravity = Gravity.CENTER
+            lineSpacingMultiplier = 1.2f
+            setPadding(0, 0, 0, dpToPx(32))
+        }
+        dashboardOverlay.addView(statusText)
+
+        // Buttons in overlay
+        val overlayButtons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            gravity = Gravity.CENTER
+        }
+
+        val startTermuxBtn = TextView(this).apply {
+            text = "START TERMUX"
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dpToPx(6).toFloat()
+                setColor(Color.parseColor("#1E1E1E"))
+                setStroke(dpToPx(1), Color.parseColor("#33FFFFFF"))
+            }
+            setOnClickListener {
+                startServerInTermux()
+            }
+        }
+        overlayButtons.addView(startTermuxBtn)
+
+        val overlaySpacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dpToPx(16), ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        overlayButtons.addView(overlaySpacer)
+
+        val configBtn = TextView(this).apply {
+            text = "INSTELLINGEN"
+            setTextColor(Color.BLACK)
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dpToPx(6).toFloat()
+                setColor(Color.parseColor("#00ADB5"))
+            }
+            setOnClickListener {
+                showSettingsDialog()
+            }
+        }
+        overlayButtons.addView(configBtn)
+
+        dashboardOverlay.addView(overlayButtons)
+        contentFrame.addView(dashboardOverlay)
+
+        rootLayout.addView(contentFrame)
+        setContentView(rootLayout)
+
+        // Start Server in Termux if configured to auto-start
+        if (getSavedAutoStart()) {
+            startServerInTermux()
+        }
+
+        // Start polling and loading
+        startPollingThread()
+    }
+
+    private fun dpToPx(dp: Int): Int {
+        return (dp * resources.displayMetrics.density).toInt()
+    }
+
+    private fun getSavedPort(): String {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_PORT, "3020") ?: "3020"
+    }
+
+    private fun getSavedCommand(): String {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_COMMAND, "cd ~/klonkt-node && npm run start & ssh -R 80:localhost:3020 a.pinggy.io") ?: "cd ~/klonkt-node && npm run start & ssh -R 80:localhost:3020 a.pinggy.io"
+    }
+
+    private fun getSavedAutoStart(): Boolean {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_AUTO_START, true)
+    }
+
+    private fun saveSettings(port: String, command: String, autoStart: Boolean) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putString(KEY_PORT, port)
+            putString(KEY_COMMAND, command)
+            putBoolean(KEY_AUTO_START, autoStart)
+            apply()
         }
     }
 
     private fun startServerInTermux() {
+        val port = getSavedPort()
+        var command = getSavedCommand()
+        
+        if (command.contains("localhost:3020") && port != "3020") {
+            command = command.replace("localhost:3020", "localhost:$port")
+        }
+
         val intent = Intent().apply {
             component = ComponentName("com.termux", "com.termux.app.RunCommandService")
             action = "com.termux.RUN_COMMAND"
             putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash")
-            putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", "cd ~/klonkt-node && npm run start & ssh -R 80:localhost:3020 a.pinggy.io"))
+            putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", command))
             putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
-            putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "1") // Run in background session
+            putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "1")
         }
         try {
             startService(intent)
+            Toast.makeText(this, "Termux-commando verzonden...", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(this, "Kon Termux-service niet starten.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Kon Termux-service niet starten: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
-    private fun waitForServer() {
-        val url = URL("http://127.0.0.1:3020")
-        var connected = false
-        var attempts = 0
-        while (!connected && attempts < 35) {
-            try {
-                val connection = url.openConnection() as HttpURLConnection
-                connection.connectTimeout = 1000
-                connection.readTimeout = 1000
-                connection.requestMethod = "GET"
-                val responseCode = connection.responseCode
-                if (responseCode == 200 || responseCode == 302 || responseCode == 404) {
-                    connected = true
+    private fun restartAppLogic() {
+        dashboardOverlay.visibility = View.VISIBLE
+        statusText.text = "Klonkt en Termux opnieuw opstarten..."
+        statusLight.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.parseColor("#FFC107"))
+        }
+        statusLabel.text = "BOOTING"
+
+        if (getSavedAutoStart()) {
+            startServerInTermux()
+        }
+
+        startPollingThread()
+    }
+
+    private fun startPollingThread() {
+        val sessionId = ++pollingSessionId
+        val port = getSavedPort()
+        
+        thread {
+            var connected = false
+            var attempts = 0
+            val url = URL("http://127.0.0.1:$port")
+            
+            while (!connected && attempts < 35 && sessionId == pollingSessionId) {
+                try {
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.connectTimeout = 1000
+                    connection.readTimeout = 1000
+                    connection.requestMethod = "GET"
+                    val responseCode = connection.responseCode
+                    if (responseCode == 200 || responseCode == 302 || responseCode == 404) {
+                        connected = true
+                    }
+                } catch (e: Exception) {
+                    attempts++
+                    Thread.sleep(1500)
                 }
-            } catch (e: Exception) {
-                attempts++
-                Thread.sleep(1500)
+            }
+            
+            if (sessionId == pollingSessionId) {
+                runOnUiThread {
+                    if (connected) {
+                        dashboardOverlay.visibility = View.GONE
+                        statusLight.background = GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            setColor(Color.parseColor("#4CAF50"))
+                        }
+                        statusLabel.text = "ONLINE"
+                        webView.loadUrl("http://127.0.0.1:$port")
+                    } else {
+                        statusLight.background = GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            setColor(Color.parseColor("#F44336"))
+                        }
+                        statusLabel.text = "OFFLINE"
+                        statusText.text = "Kan geen verbinding maken met de Klonkt server op poort $port.\n\n" +
+                                "Zorg ervoor dat:\n" +
+                                "1. Termux is geïnstalleerd en draait.\n" +
+                                "2. Klonkt is geïnstalleerd in Termux (`~/klonkt-node`).\n" +
+                                "3. 'Allow external apps' aan staat in `~/.termux/termux.properties`."
+                    }
+                }
             }
         }
-        if (!connected) {
-            throw RuntimeException("Klonkt server reageert niet.")
+    }
+
+    private fun showSettingsDialog() {
+        val builder = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog)
+        builder.setTitle("Klonkt Instellingen")
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(24), dpToPx(16), dpToPx(24), dpToPx(16))
+        }
+
+        val portLabel = TextView(this).apply {
+            text = "Server Poort"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+        }
+        container.addView(portLabel)
+
+        val portInput = EditText(this).apply {
+            setText(getSavedPort())
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setTextColor(Color.WHITE)
+        }
+        container.addView(portInput)
+
+        val commandLabel = TextView(this).apply {
+            text = "Termux Start Commando"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            setPadding(0, dpToPx(12), 0, 0)
+        }
+        container.addView(commandLabel)
+
+        val commandInput = EditText(this).apply {
+            setText(getSavedCommand())
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            setTextColor(Color.WHITE)
+        }
+        container.addView(commandInput)
+
+        val autoStartCheckbox = CheckBox(this).apply {
+            text = "Start Termux bij openen app"
+            setTextColor(Color.WHITE)
+            isChecked = getSavedAutoStart()
+            setPadding(0, dpToPx(12), 0, 0)
+        }
+        container.addView(autoStartCheckbox)
+
+        builder.setView(container)
+
+        builder.setPositiveButton("Opslaan") { _, _ ->
+            val newPort = portInput.text.toString().trim()
+            val newCommand = commandInput.text.toString().trim()
+            val newAutoStart = autoStartCheckbox.isChecked
+
+            if (newPort.isEmpty() || newCommand.isEmpty()) {
+                Toast.makeText(this, "Velden mogen niet leeg zijn", Toast.LENGTH_SHORT).show()
+                return@setPositiveButton
+            }
+
+            saveSettings(newPort, newCommand, newAutoStart)
+            Toast.makeText(this, "Instellingen opgeslagen", Toast.LENGTH_SHORT).show()
+            restartAppLogic()
+        }
+
+        builder.setNegativeButton("Annuleren") { dialog, _ ->
+            dialog.cancel()
+        }
+
+        builder.show()
+    }
+
+    override fun onBackPressed() {
+        if (::webView.isInitialized && webView.canGoBack()) {
+            webView.goBack()
+        } else {
+            super.onBackPressed()
         }
     }
 }
