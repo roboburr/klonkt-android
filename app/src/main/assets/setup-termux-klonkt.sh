@@ -14,7 +14,11 @@ fi
 termux-reload-settings
 
 echo "=== 3. Klonkt Node.js Bestanden Ophalen ==="
+echo "Bestaande processen stoppen..."
+pkill node || true
+
 echo "Bestanden worden gedownload van de Klonkt app..."
+chmod -R u+rw ~/klonkt-node 2>/dev/null || true
 rm -rf ~/klonkt-node
 mkdir -p ~/klonkt-node
 
@@ -25,8 +29,8 @@ if curl -f -s "http://127.0.0.1:3021/klonkt-node.zip" -o ~/klonkt-node.zip; then
     rm ~/klonkt-node.zip
 else
     echo "Fout bij lokaal downloaden (Klonkt staat niet open of is op de achtergrond afgesloten)."
-    echo "We vallen terug op de officiële GitHub release..."
-    if curl -f -L -s "https://github.com/roboburr/klonkt-android/releases/latest/download/klonkt-node.zip" -o ~/klonkt-node.zip; then
+    echo "We vallen terug op de officiële GitHub broncode..."
+    if curl -f -L -s "https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/klonkt-node.zip" -o ~/klonkt-node.zip; then
         echo "GitHub fallback succesvol! Uitpakken..."
         unzip -q -o ~/klonkt-node.zip -d ~/klonkt-node
         rm ~/klonkt-node.zip
