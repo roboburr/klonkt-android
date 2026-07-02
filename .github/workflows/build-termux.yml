@@ -16,21 +16,46 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: klonkt-android
-          
+
+      # ── Prebaked klonkt-node (node_modules included, built for aarch64 termux) ──
+      # Cached on the klonkt-node source zip + prebake script, so the slow QEMU
+      # build only reruns when the app source actually changes.
+      - name: Restore prebaked klonkt-node
+        id: prebake-cache
+        uses: actions/cache@v4
+        with:
+          path: klonkt-node-arm64.tar.gz
+          key: klonkt-node-arm64-${{ hashFiles('klonkt-android/app/src/main/assets/klonkt-node.zip', 'klonkt-android/ci/prebake.sh') }}
+
+      - name: Set up QEMU
+        if: steps.prebake-cache.outputs.cache-hit != 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Prebake klonkt-node (aarch64 Termux)
+        if: steps.prebake-cache.outputs.cache-hit != 'true'
+        run: |
+          unzip -q klonkt-android/app/src/main/assets/klonkt-node.zip -d klonkt-android/klonkt-node-src
+          chmod -R 777 klonkt-android
+          docker run --rm -v "$PWD/klonkt-android:/repo" termux/termux-docker:aarch64 \
+            /data/data/com.termux/files/usr/bin/bash /repo/ci/prebake.sh
+          mv klonkt-android/klonkt-node-arm64.tar.gz .
+          ls -la klonkt-node-arm64.tar.gz
+
+      # ── Patched Termux APK ──
       - name: Clone Termux
         run: git clone --depth 1 https://github.com/termux/termux-app.git termux-app
-        
+
       - name: Apply Klonkt Patch
         run: |
           cd termux-app
           git apply ../klonkt-android/termux-patch.diff
-          
+
       - name: Setup java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-          
+
       - name: Build APKs
         run: |
           cd termux-app
@@ -58,4 +83,6 @@ jobs:
           automatic_release_tag: "termux-latest"
           prerelease: true
           title: "Klonkt All-in-One (Termux) — Latest"
-          files: klonkt.apk
+          files: |
+            klonkt.apk
+            klonkt-node-arm64.tar.gz

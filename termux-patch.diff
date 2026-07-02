@@ -1,5 +1,5 @@
 diff --git a/app/src/main/java/com/termux/app/TermuxActivity.java b/app/src/main/java/com/termux/app/TermuxActivity.java
-index 0c9f741..47f3f96 100644
+index 0c9f741..cc00607 100644
 --- a/app/src/main/java/com/termux/app/TermuxActivity.java
 +++ b/app/src/main/java/com/termux/app/TermuxActivity.java
 @@ -250,6 +250,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
@@ -26,7 +26,7 @@ index 0c9f741..47f3f96 100644
                          mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
                      } catch (WindowManager.BadTokenException e) {
                          // Activity finished - ignore.
-@@ -428,6 +438,88 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
+@@ -428,6 +438,145 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
          // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
          mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
      }
@@ -43,10 +43,11 @@ index 0c9f741..47f3f96 100644
 +            fw.write("# KLONKT_V3\n");
 +            fw.write("command -v flock >/dev/null 2>&1 && { exec 9>\"$HOME/.klonkt.lock\"; flock -n 9 || exit 0; }\n");
 +            fw.write("if [ ! -f ~/klonkt-node/package.json ]; then\n");
-+            fw.write("  curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=4\" | bash\n");
++            fw.write("  curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=5\" | bash\n");
 +            fw.write("fi\n");
 +            fw.write("curl -s -o /dev/null --max-time 2 http://localhost:3020 || (cd ~/klonkt-node && npm start > ~/klonkt.log 2>&1 &)\n");
-+            fw.write("command -v cloudflared >/dev/null 2>&1 || pkg install -y cloudflared; cloudflared tunnel --url http://localhost:3020\n");
++            fw.write("command -v cloudflared >/dev/null 2>&1 || pkg install -y cloudflared\n");
++            fw.write("if [ -s \"$HOME/.klonkt-tunnel-token\" ]; then cloudflared tunnel run --token \"$(cat \"$HOME/.klonkt-tunnel-token\")\"; else cloudflared tunnel --url http://localhost:3020; fi\n");
 +            fw.close();
 +            String hook = "[ -f ~/.klonkt-start.sh ] && bash ~/.klonkt-start.sh\n";
 +            klonktAppendIfMissing(new java.io.File(home, ".bash_profile"), hook);
@@ -82,6 +83,48 @@ index 0c9f741..47f3f96 100644
 +        }
 +    }
 +
++    private static final String KLONKT_SPLASH = "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head><body style=\"margin:0;background:#0b0d12;color:#f3f1ea;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh\"><div style=\"text-align:center;padding:24px\"><div style=\"font-size:44px;font-weight:800;color:#e8b04b\">Klonkt</div><div style=\"margin-top:14px;font-size:15px;opacity:.85;line-height:1.5\">Bezig met starten&hellip;<br>De eerste keer kan dit enkele minuten duren.</div></div></body></html>";
++
++    // Klonkt: enter/clear a Cloudflare named-tunnel token. With a token the site
++    // gets the user's own fixed domain; without it, a temporary trycloudflare URL.
++    private void showKlonktTokenDialog() {
++        final java.io.File tokenFile = new java.io.File("/data/data/com.termux/files/home/.klonkt-tunnel-token");
++        String existing = "";
++        try {
++            if (tokenFile.exists()) {
++                java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(tokenFile));
++                existing = r.readLine();
++                r.close();
++                if (existing == null) existing = "";
++            }
++        } catch (Exception e) { /* ignore */ }
++        final android.widget.EditText input = new android.widget.EditText(this);
++        input.setHint("eyJh... (Cloudflare tunnel token)");
++        input.setText(existing);
++        new android.app.AlertDialog.Builder(this)
++            .setTitle("Cloudflare Tunnel")
++            .setMessage("Plak je tunnel-token (Cloudflare Zero Trust → Networks → Tunnels) voor een vast eigen domein. Leeg laten = tijdelijke trycloudflare.com-URL.")
++            .setView(input)
++            .setPositiveButton("Opslaan", (d, w) -> {
++                try {
++                    String tok = input.getText().toString().trim();
++                    if (tok.isEmpty()) {
++                        tokenFile.delete();
++                        android.widget.Toast.makeText(this, "Token gewist. Herstart de app voor een trycloudflare-URL.", android.widget.Toast.LENGTH_LONG).show();
++                    } else {
++                        java.io.FileWriter fw = new java.io.FileWriter(tokenFile, false);
++                        fw.write(tok + "\n");
++                        fw.close();
++                        android.widget.Toast.makeText(this, "Token opgeslagen. Herstart de app om de tunnel te starten.", android.widget.Toast.LENGTH_LONG).show();
++                    }
++                } catch (Exception e) {
++                    android.widget.Toast.makeText(this, "Opslaan mislukt: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
++                }
++            })
++            .setNegativeButton("Annuleren", null)
++            .show();
++    }
++
 +    private void setupKlonktWebView() {
 +        ensureKlonktBootstrap();
 +        android.webkit.WebView webView = findViewById(R.id.klonkt_webview);
@@ -91,14 +134,28 @@ index 0c9f741..47f3f96 100644
 +            webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
 +            final String kurl = "http://localhost:3020";
 +            final android.os.Handler kh = new android.os.Handler(android.os.Looper.getMainLooper());
++            final boolean[] splashShown = { false };
 +            webView.setWebViewClient(new android.webkit.WebViewClient() {
 +                @Override
++                public void onPageFinished(android.webkit.WebView view, String url) {
++                    if (url != null && url.startsWith(kurl)) splashShown[0] = false;
++                }
++                @Override
 +                public void onReceivedError(android.webkit.WebView view, int errorCode, String description, String failingUrl) {
-+                    kh.postDelayed(new Runnable() { public void run() { view.loadUrl(kurl); } }, 3000);
++                    if (!splashShown[0]) {
++                        splashShown[0] = true;
++                        view.loadDataWithBaseURL(null, KLONKT_SPLASH, "text/html", "utf-8", null);
++                    }
++                    kh.postDelayed(new Runnable() { public void run() { view.loadUrl(kurl); } }, 4000);
 +                }
 +            });
-+            webView.loadUrl(kurl);
++            splashShown[0] = true;
++            webView.loadDataWithBaseURL(null, KLONKT_SPLASH, "text/html", "utf-8", null);
++            kh.postDelayed(new Runnable() { public void run() { webView.loadUrl(kurl); } }, 2500);
 +            
++            View tokenBtn = findViewById(R.id.klonkt_token_btn);
++            if (tokenBtn != null) tokenBtn.setOnClickListener(v -> showKlonktTokenDialog());
++
 +            View toggleBtn = findViewById(R.id.toggle_view_btn);
 +            if (toggleBtn != null) {
 +                toggleBtn.setOnClickListener(v -> {
@@ -116,10 +173,10 @@ index 0c9f741..47f3f96 100644
      @Override
      public void onServiceDisconnected(ComponentName name) {
 diff --git a/app/src/main/res/layout/activity_termux.xml b/app/src/main/res/layout/activity_termux.xml
-index 831ea7c..c6799b6 100644
+index 831ea7c..9a26ae9 100644
 --- a/app/src/main/res/layout/activity_termux.xml
 +++ b/app/src/main/res/layout/activity_termux.xml
-@@ -94,6 +94,26 @@
+@@ -94,6 +94,39 @@
  
          </androidx.drawerlayout.widget.DrawerLayout>
  
@@ -139,6 +196,19 @@ index 831ea7c..c6799b6 100644
 +            android:layout_alignParentEnd="true"
 +            android:layout_margin="16dp"
 +            android:src="@android:drawable/ic_menu_preferences"
++            android:background="#80000000"
++            android:tint="#FFFFFF"
++            android:elevation="4dp" />
++
++        <ImageButton
++            android:id="@+id/klonkt_token_btn"
++            android:layout_width="48dp"
++            android:layout_height="48dp"
++            android:layout_alignParentBottom="true"
++            android:layout_alignParentEnd="true"
++            android:layout_marginEnd="16dp"
++            android:layout_marginBottom="80dp"
++            android:src="@android:drawable/ic_lock_lock"
 +            android:background="#80000000"
 +            android:tint="#FFFFFF"
 +            android:elevation="4dp" />
