@@ -16,6 +16,7 @@ if [ ! -f klonkt-upd/klonkt-node/package.json ]; then
 fi
 
 echo "[Klonkt] Server stoppen..."
+chmod -R u+rwX klonkt-node klonkt-node.prev 2>/dev/null || true
 pkill node 2>/dev/null || true
 pkill cloudflared 2>/dev/null || true
 sleep 1
