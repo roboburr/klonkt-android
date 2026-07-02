@@ -378,7 +378,8 @@ class MainActivity : Activity() {
 
     private fun getSavedAutoStart(): Boolean {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getBoolean(KEY_AUTO_START, true)
+        // Default changed to false to avoid automatic RUN_COMMAND intents on Android 14+ startup
+        return prefs.getBoolean(KEY_AUTO_START, false)
     }
 
     private fun saveSettings(port: String, command: String, autoStart: Boolean) {
