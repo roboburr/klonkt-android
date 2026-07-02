@@ -39,7 +39,7 @@ class MainActivity : Activity() {
     private val PREFS_NAME = "klonkt_prefs"
     private val KEY_PORT = "server_port"
     private val KEY_COMMAND = "termux_command"
-    private val KEY_FILES_COPIED = "files_copied"
+    private val KEY_SAVED_VERSION_CODE = "saved_version_code"
 
     private val DEFAULT_COMMAND = "termux-wake-lock && cd ~/klonkt-node && npm run start & ssh -R 80:localhost:3020 a.pinggy.io"
 
@@ -323,13 +323,24 @@ class MainActivity : Activity() {
         rootLayout.addView(contentFrame)
         setContentView(rootLayout)
 
-        // Trigger copying of offline installation ZIP and script using SharedPreferences flag
+        // Trigger copying of offline installation ZIP and script using version code check
         thread {
             try {
                 val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val filesCopied = prefs.getBoolean(KEY_FILES_COPIED, false)
+                val currentVersionCode = try {
+                    val pInfo = packageManager.getPackageInfo(packageName, 0)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        pInfo.longVersionCode
+                    } else {
+                        pInfo.versionCode.toLong()
+                    }
+                } catch (e: Exception) {
+                    0L
+                }
                 
-                if (!filesCopied) {
+                val savedVersionCode = prefs.getLong(KEY_SAVED_VERSION_CODE, -1L)
+                
+                if (currentVersionCode != savedVersionCode) {
                     runOnUiThread {
                         statusText.text = "Klonkt installatiebestanden kopiëren naar Download map..."
                     }
@@ -338,7 +349,7 @@ class MainActivity : Activity() {
                     
                     runOnUiThread {
                         if (successZip && successScript) {
-                            prefs.edit().putBoolean(KEY_FILES_COPIED, true).apply()
+                            prefs.edit().putLong(KEY_SAVED_VERSION_CODE, currentVersionCode).apply()
                             Toast.makeText(this@MainActivity, "Bestanden gekopieerd naar Download map!", Toast.LENGTH_LONG).show()
                             restartAppLogic()
                         } else {
