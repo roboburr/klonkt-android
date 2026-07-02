@@ -33,9 +33,13 @@ jobs:
         run: |
           cd termux-app
           ./gradlew assembleDebug
-          
+
+      - name: List build outputs
+        run: ls -R termux-app/app/build/outputs/apk || true
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: termux-app-klonkt-hybrid
-          path: termux-app/app/build/outputs/apk/debug/app-universal-debug.apk
+          path: termux-app/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
