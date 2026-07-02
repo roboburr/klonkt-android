@@ -363,6 +363,12 @@ class MainActivity : Activity() {
                             val input = java.io.BufferedReader(java.io.InputStreamReader(client.inputStream))
                             val requestLine = input.readLine()
                             if (requestLine != null) {
+                                // Read remaining headers to prevent TCP RST on socket close
+                                var headerLine = input.readLine()
+                                while (headerLine != null && headerLine.isNotEmpty()) {
+                                    headerLine = input.readLine()
+                                }
+                                
                                 val out = client.getOutputStream()
                                 val path = requestLine.split(" ")[1]
                                 
