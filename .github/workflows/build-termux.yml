@@ -79,6 +79,18 @@ jobs:
           cp termux-app/app/build/outputs/apk/debug/*universal.apk klonkt.apk
           ls -la klonkt.apk
 
+      - name: Write BUILD-INFO (GPL corresponding-source record)
+        run: |
+          {
+            echo "klonkt.apk — modified Termux build (GPLv3)"
+            echo "built:            $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "termux-app:       https://github.com/termux/termux-app @ $(git -C termux-app rev-parse HEAD)"
+            echo "modification:     https://github.com/roboburr/klonkt-android @ ${GITHUB_SHA} (termux-patch.diff)"
+            echo "bundled server:   Klonkt (AGPL-3.0-or-later) — https://github.com/roboburr/klonkt"
+            echo "licenses:         see NOTICE.md and LICENSE in the klonkt-android repository"
+          } > BUILD-INFO.txt
+          cat BUILD-INFO.txt
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -96,3 +108,4 @@ jobs:
           files: |
             klonkt.apk
             klonkt-node-arm64.tar.gz
+            BUILD-INFO.txt
