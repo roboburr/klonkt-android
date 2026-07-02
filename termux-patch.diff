@@ -75,7 +75,7 @@ index 0c9f741..47f3f96 100644
 +    private void klonktKickstart() {
 +        try {
 +            if (mTermuxService == null || mTermuxService.getTermuxSessions().isEmpty()) return;
-+            var ts = mTermuxService.getTermuxSessions().get(0).getTerminalSession();
++            com.termux.terminal.TerminalSession ts = mTermuxService.getTermuxSessions().get(0).getTerminalSession();
 +            if (ts != null && ts.isRunning()) ts.write("[ -f ~/.klonkt-start.sh ] && bash ~/.klonkt-start.sh\n");
 +        } catch (Exception e) {
 +            android.util.Log.e("Klonkt", "kickstart failed", e);
