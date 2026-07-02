@@ -1,5 +1,5 @@
 diff --git a/app/src/main/java/com/termux/app/TermuxActivity.java b/app/src/main/java/com/termux/app/TermuxActivity.java
-index 0c9f741..5a5eb7b 100644
+index 0c9f741..391413c 100644
 --- a/app/src/main/java/com/termux/app/TermuxActivity.java
 +++ b/app/src/main/java/com/termux/app/TermuxActivity.java
 @@ -403,6 +403,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
@@ -16,25 +16,71 @@ index 0c9f741..5a5eb7b 100644
                          mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
                      } catch (WindowManager.BadTokenException e) {
                          // Activity finished - ignore.
-@@ -429,6 +436,64 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
+@@ -429,6 +436,110 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
          mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
      }
  
-+    // Klonkt: write the start script + login-shell hooks. Idempotent (marker-based),
-+    // never silently swallows failures, and works even on a half-finished install.
++    // Klonkt: write the start script + login-shell hooks, and stage the offline
++    // bundle out of the APK assets. Idempotent (marker-based), never silently
++    // swallows failures, works even on a half-finished install.
 +    private void ensureKlonktBootstrap() {
 +        try {
 +            java.io.File home = new java.io.File("/data/data/com.termux/files/home");
 +            if (!home.exists()) home.mkdirs();
++
++            // Offline bundle: copy the APK asset (debs + prebuilt klonkt-node) to the
++            // home dir on a background thread (it is large). The start script waits
++            // for it on first run; ".part" + rename keeps the wait race-free.
++            if (!new java.io.File(home, "klonkt-node/package.json").exists()
++                    && !new java.io.File(home, "klonkt-bundle.tar.gz").exists()) {
++                new Thread(new Runnable() {
++                    public void run() {
++                        java.io.File part = new java.io.File("/data/data/com.termux/files/home/klonkt-bundle.tar.gz.part");
++                        try {
++                            java.io.InputStream in = getAssets().open("klonkt-bundle.tar.gz");
++                            java.io.FileOutputStream out = new java.io.FileOutputStream(part);
++                            byte[] buf = new byte[65536];
++                            int n;
++                            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
++                            out.close();
++                            in.close();
++                            part.renameTo(new java.io.File("/data/data/com.termux/files/home/klonkt-bundle.tar.gz"));
++                        } catch (Exception e) {
++                            android.util.Log.e("Klonkt", "bundle copy failed", e);
++                            part.delete();
++                        }
++                    }
++                }).start();
++            }
++
 +            java.io.File start = new java.io.File(home, ".klonkt-start.sh");
 +            java.io.FileWriter fw = new java.io.FileWriter(start, false);
 +            fw.write("#!/data/data/com.termux/files/usr/bin/bash\n");
-+            fw.write("# KLONKT_V7\n");
++            fw.write("# KLONKT_V8\n");
 +            fw.write("command -v flock >/dev/null 2>&1 && { exec 9>\"$HOME/.klonkt.lock\"; flock -n 9 || exit 0; }\n");
 +            fw.write("if [ ! -f ~/klonkt-node/package.json ]; then\n");
-+            fw.write("  echo \"[Klonkt] Eerste keer: installatie starten (1-2 minuten)...\"\n");
-+            fw.write("  curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=7\" | bash\n");
++            fw.write("  echo \"[Klonkt] Eerste keer: installatie starten...\"\n");
++            fw.write("  i=0; while [ ! -f ~/klonkt-bundle.tar.gz ] && [ $i -lt 45 ]; do sleep 1; i=$((i+1)); done\n");
++            fw.write("  if [ -f ~/klonkt-bundle.tar.gz ]; then\n");
++            fw.write("    echo \"[Klonkt] Offline installatie vanuit de app (geen download nodig)...\"\n");
++            fw.write("    rm -rf ~/klonkt-bundle && mkdir -p ~/klonkt-bundle\n");
++            fw.write("    tar -xzf ~/klonkt-bundle.tar.gz -C ~/klonkt-bundle\n");
++            fw.write("    echo \"[Klonkt] Pakketten installeren (nodejs, ffmpeg, cloudflared)...\"\n");
++            fw.write("    dpkg -i ~/klonkt-bundle/debs/*.deb >/dev/null 2>&1 || true\n");
++            fw.write("    rm -rf ~/klonkt-node && mv ~/klonkt-bundle/klonkt-node ~/klonkt-node\n");
++            fw.write("    rm -rf ~/klonkt-bundle ~/klonkt-bundle.tar.gz\n");
++            fw.write("  else\n");
++            fw.write("    echo \"[Klonkt] Bundel niet gevonden - online installatie...\"\n");
++            fw.write("    curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=8\" | bash\n");
++            fw.write("  fi\n");
 +            fw.write("fi\n");
++            fw.write("if [ ! -x \"$PREFIX/bin/klonkt-token\" ]; then\n");
++            fw.write("  printf '%s\\n' '#!/data/data/com.termux/files/usr/bin/bash' 'if [ -z \"$1\" ]; then echo \"Gebruik: klonkt-token <token>  (of: klonkt-token clear)\"; exit 1; fi' 'if [ \"$1\" = clear ]; then rm -f ~/.klonkt-tunnel-token; echo \"Token gewist. Herstart de app.\"; exit 0; fi' 'printf %s \"$1\" > ~/.klonkt-tunnel-token' 'echo \"Token opgeslagen. Herstart de app.\"' > \"$PREFIX/bin/klonkt-token\"\n");
++            fw.write("  chmod +x \"$PREFIX/bin/klonkt-token\"\n");
++            fw.write("fi\n");
++            fw.write("mkdir -p ~/.termux/boot\n");
++            fw.write("printf '%s\\n' '#!/data/data/com.termux/files/usr/bin/sh' 'termux-wake-lock' '[ -f ~/.klonkt-start.sh ] && bash ~/.klonkt-start.sh' > ~/.termux/boot/start-klonkt.sh\n");
++            fw.write("chmod +x ~/.termux/boot/start-klonkt.sh\n");
 +            fw.write("curl -s -o /dev/null --max-time 2 http://localhost:3020 || (cd ~/klonkt-node && PORT=3020 HOST=127.0.0.1 npm start > ~/klonkt.log 2>&1 &)\n");
 +            fw.write("echo \"\"\n");
 +            fw.write("echo \"[Klonkt] Server draait zo op:  http://localhost:3020\"\n");

@@ -24,8 +24,10 @@ jobs:
         id: prebake-cache
         uses: actions/cache@v4
         with:
-          path: klonkt-node-arm64.tar.gz
-          key: klonkt-node-arm64-${{ hashFiles('klonkt-android/app/src/main/assets/klonkt-node/**', 'klonkt-android/ci/prebake.sh') }}
+          path: |
+            klonkt-node-arm64.tar.gz
+            klonkt-bundle.tar.gz
+          key: klonkt-bundle-${{ hashFiles('klonkt-android/app/src/main/assets/klonkt-node/**', 'klonkt-android/ci/prebake.sh') }}
 
       - name: Set up QEMU
         if: steps.prebake-cache.outputs.cache-hit != 'true'
@@ -40,8 +42,8 @@ jobs:
           chmod -R 777 klonkt-android
           docker run --rm -v "$PWD/klonkt-android:/repo" termux/termux-docker:aarch64 \
             /data/data/com.termux/files/usr/bin/bash /repo/ci/prebake.sh
-          mv klonkt-android/klonkt-node-arm64.tar.gz .
-          ls -la klonkt-node-arm64.tar.gz
+          mv klonkt-android/klonkt-node-arm64.tar.gz klonkt-android/klonkt-bundle.tar.gz .
+          ls -la klonkt-node-arm64.tar.gz klonkt-bundle.tar.gz
 
       # ── Patched Termux APK ──
       - name: Clone Termux
@@ -51,6 +53,11 @@ jobs:
         run: |
           cd termux-app
           git apply ../klonkt-android/termux-patch.diff
+
+      - name: Embed offline bundle in APK assets
+        run: |
+          cp klonkt-bundle.tar.gz termux-app/app/src/main/assets/
+          ls -la termux-app/app/src/main/assets/ | head
 
       - name: Setup java 17
         uses: actions/setup-java@v4
