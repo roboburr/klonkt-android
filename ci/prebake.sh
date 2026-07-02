@@ -46,13 +46,13 @@ printf '%s\n' '{"name":"ffmpeg-static","version":"0.0.0-termux","main":"index.js
 # 3) Sanity: the native module loads, the ffmpeg stub resolves, and the server BOOTS.
 node -e 'require("better-sqlite3"); console.log("better-sqlite3 loads OK, node " + process.version)'
 node -e 'import("ffmpeg-static").then(m => { if (!m.default.includes("usr/bin/ffmpeg")) process.exit(1); console.log("ffmpeg stub:", m.default); })'
-mkdir -p /tmp/klonkt-boot
-(PORT=3555 HOST=127.0.0.1 DATABASE_PATH=/tmp/klonkt-boot/t.sqlite MEDIA_PATH=/tmp/klonkt-boot/media AUDIO_PATH=/tmp/klonkt-boot/audio \
-  timeout 60 node src/server.js > /tmp/klonkt-boot/boot.log 2>&1 || true)
-if grep -q "3555" /tmp/klonkt-boot/boot.log; then
+mkdir -p $HOME/kboot
+(PORT=3555 HOST=127.0.0.1 DATABASE_PATH=$HOME/kboot/t.sqlite MEDIA_PATH=$HOME/kboot/media AUDIO_PATH=$HOME/kboot/audio \
+  timeout 60 node src/server.js > $HOME/kboot/boot.log 2>&1 || true)
+if grep -q "3555" $HOME/kboot/boot.log; then
   echo "server boot smoke test OK"
 else
-  echo "ERROR: server failed to boot:"; cat /tmp/klonkt-boot/boot.log; exit 1
+  echo "ERROR: server failed to boot:"; cat $HOME/kboot/boot.log; exit 1
 fi
 
 # 4) Assemble both artifacts
