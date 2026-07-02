@@ -1,0 +1,159 @@
+<div class="container admin-site-edit-page">
+  <p><a href="/admin" class="btn">&larr; <%= t('aseo.back') %></a></p>
+  <h1><%= t('aseo.title') %></h1>
+  <p class="admin-tagline"><%= t('aseo.tagline_pre') %> <strong><%= site.title %></strong> <%= t('aseo.tagline_post') %></p>
+
+  <% if (typeof success !== 'undefined' && success) { %><div class="audio-flash audio-flash--ok"><%= success %></div><% } %>
+  <% if (typeof error !== 'undefined' && error) { %><div class="audio-flash audio-flash--err"><%= error %></div><% } %>
+
+  <form method="post" action="/admin/seo" class="site-form">
+
+    <fieldset>
+      <legend><%= t('aseo.index_legend') %></legend>
+      <label class="cb">
+        <input type="checkbox" name="robots_index" value="1" <%= site.robots_index ? 'checked' : '' %>>
+        <span><%= t('aseo.index_label') %> <small class="form-hint-inline">— <%= t('aseo.index_hint_pre') %> <code>noindex</code> <%= t('aseo.index_hint_post') %></small></span>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend><%= t('aseo.title_legend') %></legend>
+      <label>
+        <span><%= t('aseo.title_template') %> <small class="form-hint-inline">— <%= t('aseo.title_template_hint_pre') %> <code>{title}</code> <%= t('aseo.title_template_hint_and') %> <code>{site}</code></small></span>
+        <input type="text" name="title_template" value="<%= site.title_template || '{title} — {site}' %>" maxlength="200" placeholder="{title} — {site}">
+      </label>
+      <label>
+        <span><%= t('aseo.default_desc') %> <small class="form-hint-inline">— <%= t('aseo.default_desc_hint') %></small></span>
+        <textarea name="default_description" rows="2" maxlength="500" placeholder="<%= t('aseo.default_desc_ph') %>"><%= site.default_description || '' %></textarea>
+      </label>
+      <label>
+        <span><%= t('aseo.canonical') %> <small class="form-hint-inline">— <%= t('aseo.canonical_hint') %></small></span>
+        <input type="text" name="canonical" value="<%= site.canonical || '' %>" placeholder="https://yourdomain.com" maxlength="200">
+      </label>
+      <label>
+        <span><%= t('aseo.author') %> <small class="form-hint-inline">— <%= t('aseo.author_hint') %></small></span>
+        <input type="text" name="author" value="<%= site.author || '' %>" maxlength="120" placeholder="<%= t('aseo.author_ph') %>">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend><%= t('aseo.social_legend') %></legend>
+      <label>
+        <span><%= t('aseo.og_image') %> <small class="form-hint-inline">— <%= t('aseo.og_image_hint') %></small></span>
+        <input type="text" name="og_image_default" value="<%= site.og_image_default || '' %>" placeholder="https://yourdomain.com/share.jpg" maxlength="500">
+      </label>
+      <label>
+        <span><%= t('aseo.og_theme') %> <small class="form-hint-inline">— <%= t('aseo.og_theme_hint') %></small></span>
+        <select name="og_theme">
+          <option value="" <%= !site.og_theme ? 'selected' : '' %>><%= t('aseo.og_theme_auto') %></option>
+          <option value="light" <%= site.og_theme === 'light' ? 'selected' : '' %>><%= t('aseo.og_theme_light') %></option>
+          <option value="dark" <%= site.og_theme === 'dark' ? 'selected' : '' %>><%= t('aseo.og_theme_dark') %></option>
+        </select>
+      </label>
+      <label>
+        <span><%= t('aseo.og_locale') %> <small class="form-hint-inline">— <%= t('aseo.og_locale_hint_pre') %> <code>nl_NL</code> <%= t('aseo.og_locale_hint_or') %> <code>en_US</code></small></span>
+        <input type="text" name="og_locale" value="<%= site.og_locale || '' %>" placeholder="nl_NL" maxlength="32">
+      </label>
+      <label>
+        <span><%= t('aseo.twitter') %> <small class="form-hint-inline">— <%= t('aseo.twitter_hint') %></small></span>
+        <input type="text" name="twitter" value="<%= site.twitter || '' %>" placeholder="@jouwnaam" maxlength="64">
+      </label>
+      <label>
+        <span><%= t('aseo.fb_app') %> <small class="form-hint-inline">— <%= t('aseo.fb_app_hint') %></small></span>
+        <input type="text" name="facebook_app_id" value="<%= site.facebook_app_id || '' %>" maxlength="64">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend><%= t('aseo.publisher_legend') %></legend>
+      <label>
+        <span><%= t('aseo.type') %></span>
+        <select name="schema_type">
+          <option value="Person" <%= site.schema_type === 'Organization' ? '' : 'selected' %>><%= t('aseo.type_person') %></option>
+          <option value="Organization" <%= site.schema_type === 'Organization' ? 'selected' : '' %>><%= t('aseo.type_org') %></option>
+        </select>
+      </label>
+      <label>
+        <span><%= t('aseo.publisher_name') %> <small class="form-hint-inline">— <%= t('aseo.publisher_name_hint') %></small></span>
+        <input type="text" name="publisher_name" value="<%= site.publisher_name || '' %>" maxlength="200">
+      </label>
+      <label>
+        <span><%= t('aseo.publisher_url') %></span>
+        <input type="text" name="publisher_url" value="<%= site.publisher_url || '' %>" placeholder="https://yourdomain.com" maxlength="200">
+      </label>
+      <label>
+        <span><%= t('aseo.publisher_logo') %></span>
+        <input type="text" name="publisher_logo" value="<%= site.publisher_logo || '' %>" placeholder="https://yourdomain.com/logo.png" maxlength="500">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend><%= t('aseo.verify_legend') %></legend>
+      <label>
+        <span><%= t('aseo.verify_google') %></span>
+        <input type="text" name="google_verification" value="<%= site.google_verification || '' %>" maxlength="200">
+      </label>
+      <label>
+        <span><%= t('aseo.verify_bing') %> <small class="form-hint-inline">— <%= t('aseo.verify_bing_hint') %></small></span>
+        <input type="text" name="bing_verification" value="<%= site.bing_verification || '' %>" maxlength="200">
+      </label>
+      <label>
+        <span><%= t('aseo.verify_pinterest') %> <small class="form-hint-inline">— <%= t('aseo.verify_pinterest_hint') %></small></span>
+        <input type="text" name="pinterest_verification" value="<%= site.pinterest_verification || '' %>" maxlength="200">
+      </label>
+      <label>
+        <span><%= t('aseo.verify_yandex') %></span>
+        <input type="text" name="yandex_verification" value="<%= site.yandex_verification || '' %>" maxlength="200">
+      </label>
+    </fieldset>
+
+    <button type="submit" class="btn btn-primary"><%= t('aseo.save') %></button>
+  </form>
+</div>
+
+<style>
+.admin-site-edit-page { max-width: 760px; margin: 3rem auto; padding: 0 1rem; }
+.admin-site-edit-page h1 { font-family: var(--font-display, serif); font-size: 1.8rem; margin: 0 0 0.4rem; }
+.admin-site-edit-page .admin-tagline { color: var(--ink-muted); margin: 0 0 1.75rem; }
+
+.site-form { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; }
+/* <fieldset> does not shrink because the UA sets min-inline-size:min-content → mobile overflow.
+   min-width:0 forces it to shrink. */
+.site-form fieldset { min-width: 0; }
+.site-form input, .site-form textarea, .site-form select { min-width: 0; }
+.site-form fieldset {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  background: var(--paper-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.site-form fieldset legend { font-family: var(--font-display, serif); font-size: 1rem; padding: 0 0.4rem; }
+.site-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--ink-muted, var(--ink-soft)); }
+.site-form label.cb { flex-direction: row; align-items: flex-start; gap: 0.55rem; font-size: 0.9rem; color: var(--ink); }
+.site-form label.cb input { margin-top: 0.15rem; }
+.site-form label > span { line-height: 1.35; }
+.form-hint-inline { font-weight: 400; color: var(--ink-muted); font-size: 0.82em; }
+.site-form code { background: var(--paper); padding: 0.05rem 0.35rem; border-radius: 3px; font-size: 0.85em; }
+.site-form input[type="text"], .site-form textarea, .site-form select {
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.95rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.site-form textarea { resize: vertical; min-height: 2.6rem; }
+.site-form select { max-width: 320px; }
+.site-form input:focus, .site-form textarea:focus, .site-form select:focus {
+  outline: none; border-color: var(--accent);
+}
+.seo-pointer p { margin: 0; font-size: 0.9rem; color: var(--ink-muted); }
+.seo-pointer a { color: var(--accent); font-weight: 600; }
+.site-form > button[type="submit"] { align-self: flex-start; }
+</style>

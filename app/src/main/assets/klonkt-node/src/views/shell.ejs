@@ -1,0 +1,882 @@
+<%
+// ── Helpers used inside this template ─────────────────────────────
+// Escape for double-quoted HTML attributes. IMPORTANT: emit this with the RAW EJS output
+// tag, never the escaping one — escaping it a second time turned og:title "Jason's" into the
+// double-escaped "Jason&amp;#39;s", and naive OG scrapers (Signal/WhatsApp) show that literally.
+// We deliberately do NOT escape the apostrophe: it is safe inside a double-quoted attribute and
+// a literal apostrophe is what link-preview scrapers expect.
+function _e(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+const safeSite     = site || {};
+const safeUrlBase  = (typeof siteUrlBase !== 'undefined' && siteUrlBase) ? siteUrlBase : '';
+const safeAccent   = safeSite.accent && /^#[0-9a-fA-F]{6}$/.test(safeSite.accent) ? safeSite.accent : '#e8b04b';
+const lang         = safeSite.language || 'nl';
+const ogLocale     = safeSite.og_locale || (lang === 'nl' ? 'nl_NL' : (lang.length === 2 ? lang + '_' + lang.toUpperCase() : 'en_US'));
+const homePath     = safeUrlBase + '/';
+const isPostPage   = bodyClass && bodyClass.indexOf('on-post')    >= 0;
+const isHomePage   = bodyClass && bodyClass.indexOf('on-home')    >= 0;
+const isSpecialPg  = bodyClass && bodyClass.indexOf('on-special') >= 0;
+const isAdminPage  = bodyClass && bodyClass.indexOf('on-admin')   >= 0;
+
+// ── <title> via site.title_template ──────────────────────────────
+// Template: '{title} — {site}'. If pageTitle equals site.title (homepage) we
+// just use the site title alone, otherwise apply the template.
+const _siteTitle  = safeSite.title || 'Klonkt';
+const _rawTitle   = pageTitle || _siteTitle;
+const _tpl        = safeSite.title_template || '{title} — {site}';
+const _finalTitle = (_rawTitle === _siteTitle)
+  ? _siteTitle
+  : _tpl.replace('{title}', _rawTitle).replace('{site}', _siteTitle);
+
+// ── Robots: noindex on listing pages and on per-post override ─────
+let _shouldIndex = safeSite.robots_index !== 0;
+if (typeof post !== 'undefined' && post && post.noindex) _shouldIndex = false;
+// Listing pages (search/tag/type/archive) shouldn't be indexed (dupe content)
+if (currentPath) {
+  if (/^\/(?:search|tag|type|archive|users|account|admin)(?:$|\/)/.test(currentPath)) {
+    _shouldIndex = false;
+  }
+}
+// Special-flagged views from routes opt out too
+if (isSpecialPg && (currentPath === '/search' || /^\/(tag|type|archive|users)\//.test(currentPath))) {
+  _shouldIndex = false;
+}
+
+// ── Canonical URL: per-site override (admin SEO), else the .env base
+//    (PUBLIC_BASE_URL, via ogOrigin → falls back to the request host) ──
+let _canonical = null;
+const _canonBase = safeSite.canonical || (typeof ogOrigin !== 'undefined' ? ogOrigin : '');
+if (_canonBase) {
+  const _base = _canonBase.replace(/\/+$/, '');
+  let _path = '/';
+  if (typeof post !== 'undefined' && post && post.slug) _path = '/' + post.slug;
+  else if (currentPath) _path = currentPath;
+  _canonical = _base + _path;
+}
+
+// ── Social bits (OG/Twitter) ──────────────────────────────────────
+const _socialTitle = (typeof post !== 'undefined' && post && post.title) ? post.title : _siteTitle;
+const _socialDescr = (typeof socialDescr !== 'undefined' && socialDescr)
+  ? socialDescr
+  : (safeSite.default_description || safeSite.description || '');
+// og:image — custom (post/site) first; otherwise the auto-generated themed card
+// (/og/<slug>.png), so every site has a branded social preview by default.
+let _socialImage = '', _ogGenerated = false;
+if (typeof socialImage !== 'undefined' && socialImage) _socialImage = socialImage;
+else if (safeSite.og_image_default) _socialImage = safeSite.og_image_default;
+else if (safeSite.default_cover) _socialImage = safeSite.default_cover;
+else if (safeSite.slug && typeof ogOrigin !== 'undefined' && ogOrigin) {
+  _socialImage = ogOrigin + '/og/' + encodeURIComponent(safeSite.slug) + '.png';
+  _ogGenerated = true;
+}
+// og:image / twitter:image / JSON-LD image MUST be absolute (OGP spec). A post cover arrives as
+// a relative /media/... path; strict scrapers (WhatsApp/Signal/some fediverse clients) won't
+// resolve it against the page URL → no preview image. Absolutize against the canonical origin.
+if (_socialImage && _socialImage.charAt(0) === '/' && _socialImage.charAt(1) !== '/' && typeof ogOrigin !== 'undefined' && ogOrigin) {
+  _socialImage = ogOrigin + _socialImage;
+}
+const _ogType = isPostPage ? 'article' : 'website';
+
+// ── JSON-LD ───────────────────────────────────────────────────────
+const _publisher = {
+  '@type': safeSite.schema_type === 'Organization' ? 'Organization' : 'Person',
+  name: safeSite.publisher_name || _siteTitle,
+  url:  safeSite.publisher_url  || (_canonical ? _canonical.split(/(?<=^[^/]*\/\/[^/]+)\//)[0] + '/' : null),
+};
+if (safeSite.publisher_logo) {
+  _publisher.logo = { '@type': 'ImageObject', url: safeSite.publisher_logo };
+}
+let _jsonLd = null;
+if (typeof post !== 'undefined' && post && post.slug) {
+  _jsonLd = {
+    '@context':    'https://schema.org',
+    '@type':       (post.type === 'foto' || post.type === 'video') ? 'CreativeWork' : 'Article',
+    headline:      post.title || _siteTitle,
+    description:   _socialDescr,
+    datePublished: post.published_at || post.created_at || new Date().toISOString(),
+    dateModified:  post.updated_at   || post.published_at || new Date().toISOString(),
+    publisher:     _publisher,
+  };
+  if (_socialImage) _jsonLd.image = _socialImage;
+  if (post.author_username) _jsonLd.author = { '@type': 'Person', name: post.author_username };
+  if (Array.isArray(post.tags) && post.tags.length) _jsonLd.keywords = post.tags.join(', ');
+} else if (isHomePage) {
+  _jsonLd = {
+    '@context': 'https://schema.org',
+    '@type':    'WebSite',
+    name:       _siteTitle,
+    description: safeSite.description || safeSite.default_description || '',
+    publisher:  _publisher,
+  };
+}
+%><!DOCTYPE html>
+<html lang="<%- _e(lang) %>" data-palette="<%- _e((typeof palette !== 'undefined' && palette) ? palette : (safeSite.palette || 'klonkt')) %>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+
+<title><%= _finalTitle %></title>
+<meta name="description" content="<%- _e(_socialDescr) %>">
+<meta name="theme-color" content="<%- _e(safeAccent) %>">
+<meta name="robots" content="<%= _shouldIndex ? 'index,follow' : 'noindex,nofollow' %>">
+<% if (safeSite.author) { %><meta name="author" content="<%- _e(safeSite.author) %>"><% } %>
+<% if (_canonical) { %><link rel="canonical" href="<%- _e(_canonical) %>"><% } %>
+
+<!-- Search-engine verification -->
+<% if (safeSite.google_verification)    { %><meta name="google-site-verification" content="<%- _e(safeSite.google_verification) %>"><% } %>
+<% if (safeSite.bing_verification)      { %><meta name="msvalidate.01" content="<%- _e(safeSite.bing_verification) %>"><% } %>
+<% if (safeSite.pinterest_verification) { %><meta name="p:domain_verify" content="<%- _e(safeSite.pinterest_verification) %>"><% } %>
+<% if (safeSite.yandex_verification)    { %><meta name="yandex-verification" content="<%- _e(safeSite.yandex_verification) %>"><% } %>
+
+<!-- Feed autodiscovery -->
+<% if (site) { %>
+<link rel="alternate" type="application/rss+xml"  title="<%- _e(_siteTitle) %> — RSS"  href="<%- _e(safeUrlBase + '/feed.xml') %>">
+<link rel="alternate" type="application/atom+xml" title="<%- _e(_siteTitle) %> — Atom" href="<%- _e(safeUrlBase + '/atom.xml') %>">
+<% } %>
+
+<!-- PWA -->
+<link rel="manifest" href="<%- _e(safeUrlBase + '/manifest.webmanifest') %>">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="<%- _e(_siteTitle.slice(0, 16)) %>">
+<link rel="apple-touch-icon" href="<%- _e(safeSite.profile_photo || '/favicon.ico') %>">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=sf">
+<link rel="alternate icon" href="/favicon.ico?v=sf">
+
+<!-- OpenGraph -->
+<meta property="og:type"        content="<%= _ogType %>">
+<meta property="og:title"       content="<%- _e(_socialTitle) %>">
+<meta property="og:description" content="<%- _e(_socialDescr) %>">
+<meta property="og:site_name"   content="<%- _e(_siteTitle) %>">
+<meta property="og:locale"      content="<%- _e(ogLocale) %>">
+<% if (_socialImage) { %>
+<meta property="og:image"     content="<%- _e(_socialImage) %>">
+<meta property="og:image:alt" content="<%- _e(_socialTitle) %>">
+<% if (_ogGenerated) { %>
+<meta property="og:image:width"  content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:type"   content="image/png">
+<% } %>
+<% } %>
+<% if (_canonical) { %><meta property="og:url" content="<%- _e(_canonical) %>"><% } %>
+<%
+// Fediverse/social PLAYER card for posts with audio: instead of shipping the raw
+// mp3, point at our embeddable player (/embed?post=slug) so Mastodon shows an
+// inline player that streams via the gated /audio/stream (no downloadable file).
+const _postAudio = !!(typeof post !== 'undefined' && post
+  && typeof postHasPlayableAudio !== 'undefined' && postHasPlayableAudio
+  && typeof premiumUnlocked !== 'undefined' && premiumUnlocked);
+const _embedUrl = _postAudio
+  ? ((typeof ogOrigin !== 'undefined' && ogOrigin ? ogOrigin : '') + safeUrlBase + '/embed?post=' + encodeURIComponent(post.slug))
+  : '';
+%>
+<% if (_postAudio) { %>
+<meta property="og:video"            content="<%- _e(_embedUrl) %>">
+<meta property="og:video:secure_url" content="<%- _e(_embedUrl) %>">
+<meta property="og:video:type"       content="text/html">
+<meta property="og:video:width"      content="480">
+<meta property="og:video:height"     content="480">
+<% } %>
+<% if (typeof post !== 'undefined' && post && post.published_at) { %>
+<meta property="article:published_time" content="<%- _e(post.published_at) %>">
+<% if (post.author_username) { %><meta property="article:author" content="<%- _e(post.author_username) %>"><% } %>
+<% } %>
+<% if (safeSite.facebook_app_id) { %><meta property="fb:app_id" content="<%- _e(safeSite.facebook_app_id) %>"><% } %>
+
+<!-- Twitter Cards -->
+<meta name="twitter:card"        content="<%= _postAudio ? 'player' : (_socialImage ? 'summary_large_image' : 'summary') %>">
+<% if (_postAudio) { %>
+<meta name="twitter:player"        content="<%- _e(_embedUrl) %>">
+<meta name="twitter:player:width"  content="480">
+<meta name="twitter:player:height" content="480">
+<% } %>
+<meta name="twitter:title"       content="<%- _e(_socialTitle) %>">
+<meta name="twitter:description" content="<%- _e(_socialDescr) %>">
+<% if (_socialImage)         { %><meta name="twitter:image"   content="<%- _e(_socialImage) %>"><% } %>
+<% if (safeSite.twitter)     { %><meta name="twitter:creator" content="<%- _e(safeSite.twitter) %>"><meta name="twitter:site" content="<%- _e(safeSite.twitter) %>"><% } %>
+
+<% if (_jsonLd) { %>
+<script type="application/ld+json"><%- JSON.stringify(_jsonLd) %></script>
+<% } %>
+<% if (typeof musicLd !== 'undefined' && musicLd) { %>
+<%# Music posts also carry standard schema.org MusicRecording/MusicAlbum data (Phase 1 of
+    music federation): real web standard, read by search engines + generic consumers. %>
+<script type="application/ld+json"><%- JSON.stringify(musicLd) %></script>
+<% } %>
+
+<!-- Self-hosted fonts (privacy-first) -->
+<link rel="preload" href="/assets/fonts/literata-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/fraunces-latin-full-normal.woff2" as="font" type="font/woff2" crossorigin>
+
+<!-- v9 stylesheet (full palette system) -->
+<link rel="stylesheet" href="/assets/css/style.css?v=67">
+<script>
+/* iOS safe-area, built by hand. env(safe-area-inset-top) resolves to 0 on this iOS in
+   BOTH Safari and the installed PWA (standalone), even with viewport-fit=cover, so the
+   masthead can't clear the camera. We measure env directly and, when it comes back empty
+   on a notched iPhone, fall back to a fixed inset (a bit larger in standalone for the
+   Dynamic Island). We set --ios-safe-top AND force the masthead padding inline — the
+   latter survives a stale cached stylesheet that lacks the var. Re-applied after htmx
+   chrome swaps (the top-nav is out-of-band swapped on navigation). */
+(function(){
+  var ua = navigator.userAgent || '';
+  var isIOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (!isIOS) return;
+  var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  function apply(){
+    if (!document.body) return;
+    var p = document.createElement('div');
+    p.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;padding-top:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none';
+    document.body.appendChild(p);
+    var rawEnv = parseFloat(getComputedStyle(p).paddingTop) || 0;
+    p.remove();
+    var i = rawEnv;
+    if (i < 20 && Math.max(screen.width, screen.height) >= 812) {
+      // Portrait: the island sits at the TOP → full inset (UNCHANGED: standalone?59:47).
+      // Landscape: the island moves to the SIDE, so the top inset is ~0 → no top padding
+      // (only the masthead's own base padding remains). env() can't tell us (returns 0),
+      // so we key off orientation directly.
+      i = (window.innerWidth > window.innerHeight) ? 0 : (standalone ? 59 : 47);
+    }
+    document.documentElement.style.setProperty('--ios-safe-top', i + 'px');
+    var mh = document.querySelector('.masthead');
+    var mhHidden = !mh || getComputedStyle(mh).display === 'none' || mh.offsetHeight === 0;
+    if (mhHidden) {
+      /* Mobile: the masthead is hidden (bottom-tab replaces it ≤767px) so it can't carry
+         the inset. Pad the body instead → the profile-header clears the island/notch. */
+      document.body.style.paddingTop = i + 'px';
+      if (mh) mh.style.paddingTop = '';
+    } else {
+      /* Desktop/landscape: the sticky masthead carries the inset in its own padding. */
+      document.body.style.paddingTop = '';
+      mh.style.paddingTop = 'calc(.55rem + ' + i + 'px)';
+    }
+  }
+  if (document.body) apply(); else document.addEventListener('DOMContentLoaded', apply);
+  document.addEventListener('htmx:afterSettle', apply);
+  window.addEventListener('orientationchange', function(){ setTimeout(apply, 250); });
+})();
+</script>
+
+<!-- Audio player styles: loaded on every page so the mini-player works
+     anywhere (admin previews, post embeds, etc). The player itself is
+     a singleton — see the script tag near </body>. -->
+<link rel="stylesheet" href="/assets/css/audio.css?v=11">
+<!-- Eigen custom media-embeds (YouTube/SoundCloud/Spotify) in huisstijl. -->
+<link rel="stylesheet" href="/assets/css/embed.css?v=9">
+
+<%- include('partials/shared-styles') %>
+
+<!-- v1 P55 — Inline the saved site accent. The base stylesheet only sets a
+     fallback (#c2410c orange) and palette blocks don't define --accent at
+     all, so without this override the saved accent never reaches the page.
+     :root + [data-palette] hits both unscoped and palette-scoped variants;
+     source-order wins on equal specificity, and this comes after style.css. -->
+<style id="pcms-site-accent">
+  :root,
+  [data-palette] {
+    --accent: <%- _e(safeAccent) %>;
+    --accent-soft: color-mix(in srgb, <%- _e(safeAccent) %> 80%, white);
+    --accent-tint: color-mix(in srgb, <%- _e(safeAccent) %> 12%, transparent);
+  }
+</style>
+
+<!-- Per-site custom CSS injection -->
+<% if (safeSite.custom_css) { %>
+<style id="pcms-custom-css"><%- safeSite.custom_css %></style>
+<% } %>
+
+<!-- Apply theme ASAP, before paint. Precedence (first match wins):
+     1. localStorage override (visitor toggled earlier on this browser)
+     2. Site default (theme_override + palette) — what new visitors see
+     3. Device prefers-color-scheme (only if site default is empty/auto)
+     4. 'dark' as last-ditch fallback
+     Note: PALETTE never has a localStorage layer anymore. There's no UI for
+     visitors to pick a palette, so any cached pcms-palette is stale data
+     from old code paths and gets cleaned up here. Site default always wins
+     for palette. -->
+<script>
+  (function() {
+    try {
+      var siteDefault   = '<%= safeSite.theme_override || "" %>';
+      var sitePalette   = '<%= (typeof palette !== 'undefined' && palette) ? palette : (safeSite.palette || 'klonkt') %>';
+
+      // One-time cleanup: drop the orphan pcms-palette key set by P43-P57
+      // bootstrap. After this it never re-appears because nothing writes it.
+      try { localStorage.removeItem('pcms-palette'); } catch(_) {}
+
+      // Theme: localStorage > site override > device pref > dark
+      var storedTheme = null;
+      try { storedTheme = localStorage.getItem('pcms-theme'); } catch(_) {}
+      var deviceDark = window.matchMedia &&
+                       window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var t = storedTheme
+           || siteDefault
+           || (deviceDark ? 'dark' : 'light');
+
+      // Palette: site default only.
+      document.documentElement.setAttribute('data-theme', t);
+      document.documentElement.setAttribute('data-palette', sitePalette);
+    } catch(e) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
+
+<!-- HTMX — bundled locally from node_modules at boot, zero third-party requests -->
+<script src="/assets/js/htmx.min.js"></script>
+
+<!-- Per-site custom <head> HTML (analytics, verification, etc.) -->
+<% if (safeSite.custom_head_html) { %>
+<%- safeSite.custom_head_html %>
+<% } %>
+</head>
+
+<body class="<%= bodyClass || 'on-home' %> has-bottom-tab" data-feed-view="<%- _e(safeSite.feed_view_default || 'timeline') %>" data-grid-cols="3" data-site-base="<%- _e((typeof siteUrlBase !== 'undefined' && siteUrlBase) ? siteUrlBase : '') %>">
+
+<% if (typeof isViewer !== 'undefined' && isViewer) { %>
+  <div class="viewer-banner" role="status">
+    <span class="viewer-banner-ico" aria-hidden="true">👁️</span>
+    <span class="viewer-banner-text"><strong>Kijker-modus</strong> — je kunt alles bekijken, maar niets wijzigen.</span>
+  </div>
+  <style>
+    .viewer-banner {
+      position: sticky; top: 0; z-index: 60;
+      display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: linear-gradient(90deg,
+        color-mix(in srgb, var(--accent) 88%, #000) 0%,
+        var(--accent) 100%);
+      color: #fff;
+      font-size: 0.85rem; line-height: 1.3;
+      box-shadow: 0 1px 6px color-mix(in srgb, var(--accent) 45%, transparent);
+    }
+    .viewer-banner-ico { font-size: 1rem; }
+    .viewer-banner-text strong { font-weight: 700; }
+  </style>
+<% } %>
+
+<%# Site-chrome (topnav + profielkop + view-switcher) in één vaste slot #pcms-chrome.
+    Bij htmx-navigatie wordt dit slot out-of-band ververst (zie chrome.ejs +
+    render.js), zodat de kop ALTIJD bij de nieuwe pagina/artiest hoort terwijl de
+    audioplayer (los in document.body) blijft leven → geen verspringen. Op de
+    hub-landing is het slot leeg: de hero is daar de header. %>
+<%- include('partials/chrome') %>
+
+<%# Geen hx-history-elt: htmx' eigen history staat uit (zie de link-boost).
+    Back/forward wordt door onze popstate-listener gedaan, die de partial
+    her-fetcht (incl. correcte OOB-chrome). Met hx-history-elt + htmx-history
+    aan dumpte htmx de partial ongefilterd hier → dubbele kop. %>
+<main id="pcms-main" class="pcms-main">
+  <div id="pcms-loading" class="pcms-loading" aria-hidden="true"></div>
+  <%- pageContent %>
+</main>
+
+<%- include('partials/footer') %>
+
+<!-- Mobile bottom-tab navigation (auto-hidden ≥768px). Toont overal — óók op de
+     hub-landing (zodat mobiel altijd Home/Zoek/Inloggen heeft) — behalve op de
+     auth-focusschermen. -->
+<% if (!(typeof bodyClass === 'string' && bodyClass.indexOf('on-auth') >= 0)) { %>
+<%- include('partials/bottom-tab') %>
+<% } %>
+
+<!-- Mobile profile sheet (auto-hidden ≥768px; only rendered when logged in) -->
+<% if (user) { %>
+<%- include('partials/profile-sheet') %>
+<% } %>
+
+<!-- Audio player: load on every page (admin + public) so window.pcmsAudioPlayer
+     is always available. The PCMS_SITE_TRACKS bootstrap is still gated on
+     enable_audio_player since it's a public-page concept (auto-discovered
+     tracks from rendered post embeds).
+
+     ?v=N — cache-buster: bump bij elke audio-player.js wijziging zodat
+     Cloudflare (max-age=1y) niet de oude versie blijft serveren. -->
+<script src="/assets/js/audio-player.js?v=31"></script>
+<!-- Eigen custom media-embeds (YouTube/SoundCloud/Spotify) via de echte
+     player-API's + gedeelde mutual-exclusion registry met de site-speler. -->
+<script src="/assets/js/embed-player.js?v=17" defer></script>
+<% if (site && site.enable_audio_player && audioTracks && audioTracks.length > 0) { %>
+  <script>window.PCMS_SITE_TRACKS = <%- JSON.stringify(audioTracks) %>;</script>
+<% } %>
+
+<!-- Install-app button: detects platform + shows install instructions modal -->
+<script src="/assets/js/install-app.js?v=2" defer></script>
+
+<!-- Service Worker registration -->
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+</script>
+
+<!-- HTMX navigation: keep body class in sync with the swapped page.
+     The server emits HX-Trigger-After-Settle: { pcmsNav: { bodyClass } } via
+     renderPage() in middleware/render.js. Without this listener the body
+     class stays whatever the initial page-load set, so the profile-header
+     never collapses/expands when navigating home → post → home via HTMX. -->
+<script>
+(function() {
+  // De page-context body-classes. Bij pcmsNav strippen we ze allemaal en zetten
+  // we opnieuw wat de server stuurde. 'on-auth' staat erbij zodat het login-
+  // focusscherm óók via htmx z'n styling krijgt (geen chrome, geen tab, audio op 0).
+  var PAGE_CLASSES = ['on-home','on-post','on-special','on-archive','on-search','on-admin','on-auth',
+    'on-shows','on-downloads','on-download','on-epk','on-linkbio','on-newsletter',
+    'on-tag','on-type','on-user','on-cirkel','on-hub','on-chat'];
+
+  document.body.addEventListener('pcmsNav', function(ev) {
+    var d = ev.detail || {};
+    // Per-site accent + palette bijwerken (head wordt niet mee-geswapt bij htmx-nav,
+    // dus zonder dit erft een artiest de kleuren van de vorige pagina).
+    if (d.accent && /^#[0-9a-fA-F]{6}$/.test(d.accent)) {
+      var sa = document.getElementById('pcms-site-accent');
+      if (sa) {
+        sa.textContent =
+          ':root,[data-palette]{--accent:' + d.accent +
+          ';--accent-soft:color-mix(in srgb,' + d.accent + ' 80%,white)' +
+          ';--accent-tint:color-mix(in srgb,' + d.accent + ' 12%,transparent);}';
+      }
+    }
+    if (d.palette && /^[a-z0-9-]+$/i.test(d.palette)) {
+      document.documentElement.setAttribute('data-palette', d.palette);
+    }
+
+    var next = d.bodyClass;
+    if (!next) return;
+    // De server kan meerdere page-classes sturen ("on-special on-auth"). Strip
+    // alle bekende en zet ALLE meegestuurde page-classes terug (niet alleen de
+    // eerste) — anders mist 'on-auth' bij htmx-nav en blijft het login-scherm
+    // de chrome/tab van de vorige pagina houden.
+    var matched = String(next).split(/\s+/).filter(function(c) {
+      return PAGE_CLASSES.indexOf(c) >= 0;
+    });
+    if (!matched.length) return;
+    PAGE_CLASSES.forEach(function(c) { document.body.classList.remove(c); });
+    matched.forEach(function(c) { document.body.classList.add(c); });
+  });
+
+  // (Back/forward wordt afgehandeld door de popstate-listener in de link-boost
+  //  hieronder — die her-fetcht de partial via htmx.ajax, wat de OOB-chrome +
+  //  de pcmsNav-trigger (accent/palette/bodyClass) correct toepast. De vroegere
+  //  htmx:historyRestore-handler is vervallen nu htmx-history uitstaat.)
+})();
+</script>
+
+<!-- View switcher + grid-cols persistence (event delegation: works for switcher
+     elements rendered later by HTMX, e.g. when navigating back to home). -->
+<script>
+(function() {
+  var body = document.body;
+  // Restore feed view + grid cols from localStorage (overrides server default)
+  try {
+    var v = localStorage.getItem('pcms-feed-view');
+    if (v === 'timeline' || v === 'grid') body.dataset.feedView = v;
+    var c = parseInt(localStorage.getItem('pcms-grid-cols'), 10);
+    if (c === 2 || c === 3 || c === 4) body.dataset.gridCols = String(c);
+  } catch (e) {}
+
+  function syncAria() {
+    // Alleen op een feed-pagina hoort Tijdlijn/Grid 'actief' (wit) te zijn; op
+    // agenda/downloads/post/etc. beide grijs. Inline feed-check (FEED_PAGE_CLASSES
+    // staat verderop, maar deze functie draait al bij init).
+    var _feedC = ['on-home','on-tag','on-type','on-user','on-cirkel'];
+    var _onFeed = _feedC.some(function(c){ return body.classList.contains(c); });
+    document.querySelectorAll('.view-switch-btn').forEach(function(b) {
+      b.setAttribute('aria-selected', (_onFeed && b.dataset.view === body.dataset.feedView) ? 'true' : 'false');
+    });
+    document.querySelectorAll('.grid-cols-btn').forEach(function(b) {
+      b.classList.toggle('is-active', b.dataset.cols === body.dataset.gridCols);
+    });
+  }
+  syncAria();
+  // Re-sync after HTMX brings in new content (e.g. navigating back to home).
+  // pcmsNav vuurt ná de body-class-update (zie de pcmsNav-listener hierboven), dus
+  // dáár weet syncAria de juiste pagina-class — los van de afterSettle-timing.
+  // Een vertraagde herhaling wint eventuele resterende races (OOB-chrome-swap).
+  document.body.addEventListener('htmx:afterSettle', function(){ syncAria(); setTimeout(syncAria, 60); });
+  document.body.addEventListener('pcmsNav', function(){ syncAria(); setTimeout(syncAria, 60); });
+
+  // Pages where the body actually has a feed to toggle. On these the
+  // click stays put — it just flips body[data-feed-view] and CSS does
+  // the rest. Anywhere else (post detail, account, search, auth) we
+  // navigate to home in the chosen view, so the switcher is never
+  // a dead control.
+  // NB: 'on-archive' staat hier bewust NIET tussen — op het archief is er geen
+  // in-place timeline/grid-toggle; een klik op de switcher springt terug naar de
+  // feed in de gekozen weergave (zie de !isFeedPage()-tak hieronder).
+  var FEED_PAGE_CLASSES = ['on-home', 'on-tag', 'on-type', 'on-user', 'on-cirkel'];
+  function isFeedPage() {
+    for (var i = 0; i < FEED_PAGE_CLASSES.length; i++) {
+      if (body.classList.contains(FEED_PAGE_CLASSES[i])) return true;
+    }
+    return false;
+  }
+
+  // Event delegation — single listener handles current and future buttons.
+  document.addEventListener('click', function(e) {
+    var sw = e.target.closest('.view-switch-btn');
+    if (sw) {
+      var view = sw.dataset.view;
+      body.dataset.feedView = view;
+      try { localStorage.setItem('pcms-feed-view', view); } catch(_) {}
+      syncAria();
+      // On non-feed pages the switcher acts as a navigation: take the
+      // user back to home in the chosen view. Use HTMX if available so
+      // the page transition matches the rest of the site's nav.
+      if (!isFeedPage()) {
+        // Naar de SITE-home in de gekozen view (siteUrlBase), niet de globale '/'
+        // — in hub is '/' de hub-overview, niet de tijdlijn van deze artiest.
+        var base = body.dataset.siteBase || '';
+        if (window.htmx) {
+          window.htmx.ajax('GET', base + '/?partial=1', { target: '#pcms-main', swap: 'innerHTML' });
+          history.pushState({}, '', base + '/');
+        } else {
+          location.href = base + '/';
+        }
+      }
+      return;
+    }
+    var gc = e.target.closest('.grid-cols-btn');
+    if (gc) {
+      body.dataset.gridCols = gc.dataset.cols;
+      try { localStorage.setItem('pcms-grid-cols', gc.dataset.cols); } catch(_) {}
+      syncAria();
+    }
+  });
+})();
+</script>
+
+<!-- Globale link-boost: alle interne navigatie-links lopen via htmx in #pcms-main,
+     zodat de audioplayer (los in document.body) blijft spelen i.p.v. te verspringen
+     bij een full page-load. Werkt overal — Beheer, Account, posts, sites — zonder
+     elke link los htmx te maken. Links die écht een volledige load nodig hebben
+     (uitloggen/auth, downloads, feeds, media, assets, bestanden) worden overgeslagen,
+     net als links die al hun eigen hx-* hebben. -->
+<script>
+(function () {
+  if (!window.htmx) return;
+  // htmx' EIGEN history-afhandeling volledig uitzetten. We doen back/forward zelf
+  // via de popstate-listener hieronder (htmx.ajax → verwerkt de OOB-chrome netjes).
+  // Lieten we htmx z'n gang gaan, dan herstelde 'ie #pcms-main door de partial
+  // (inclusief de <div id=pcms-chrome hx-swap-oob>) ONGEFILTERD in #pcms-main te
+  // dumpen → een tweede, geneste kop = de pagina dubbel. Eén mechanisme nu.
+  try { window.htmx.config.historyEnabled = false; } catch (_) {}
+
+  function fullLoad(a, url) {
+    if (a.hasAttribute('download') || a.hasAttribute('data-full-load')) return true;
+    if (a.hasAttribute('hx-get') || a.hasAttribute('hx-post') || a.hasAttribute('hx-boost')) return true;
+    if (a.target && a.target !== '_self') return true;
+    if (a.getAttribute('rel') === 'external') return true;
+    var p = url.pathname;
+    // Sessie/redirect-acties → volledige navigatie (cookies, Google-redirect).
+    // Maar de auth-FORMULIERpagina's (/auth/admin, /auth/login, /auth/register,
+    // /auth/reset…) mogen wél via htmx, zodat de audiospeler blijft doorspelen
+    // i.p.v. te herstarten/verspringen bij een volledige page-load.
+    if (/^\/(logout|oauth)(?:\/|$)/.test(p)) return true;
+    if (/^\/auth\/(logout|google)(?:\/|$)/.test(p)) return true;
+    // Feeds, PWA, service-worker, statics, media-streams, downloads.
+    if (/^\/(feed|atom|sitemap|manifest|robots|sw\.js|assets|media|audio|uploads)(?:\/|\.|$)/.test(p)) return true;
+    if (/\.[a-z0-9]{2,5}$/i.test(p)) return true; // bestandsextensie → laat de browser 't halen
+    return false;
+  }
+
+  var lastPath = location.pathname + location.search;
+  var navTimer = null;
+
+  // Eén plek voor alle programmatische navigatie-swaps. Annuleert eerst een nog
+  // lopende request op #pcms-main (anti-race: bij snel klikken/terug-gaan kan een
+  // trage oude response anders een nieuwe pagina overschrijven → "kale content").
+  function doNav(dest) {
+    try { window.htmx.trigger('#pcms-main', 'htmx:abort'); } catch (_) {}
+    window.htmx.ajax('GET', dest, { target: '#pcms-main', swap: 'innerHTML' });
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest('a[href]');
+    if (!a) return;
+    var href = a.getAttribute('href');
+    if (!href || href.charAt(0) === '#') return;
+    var url; try { url = new URL(a.href, location.href); } catch (_) { return; }
+    if (url.origin !== location.origin) return;
+    if (fullLoad(a, url)) return;
+    e.preventDefault();
+    var dest = url.pathname + url.search;
+    if (dest !== lastPath) history.pushState({ b: 1 }, '', dest);
+    lastPath = dest;
+    if (navTimer) { clearTimeout(navTimer); navTimer = null; }
+    doNav(dest);
+    try { window.scrollTo(0, 0); } catch (_) {}
+  });
+
+  window.addEventListener('popstate', function () {
+    var here = location.pathname + location.search;
+    if (here === lastPath) return;
+    lastPath = here;
+    // Debounce: bij heel snel/herhaald terug-vooruit niet elke tussenpagina ophalen,
+    // alleen de LAATSTE bestemming. Voorkomt overlappende swaps ("kale content").
+    if (navTimer) clearTimeout(navTimer);
+    navTimer = setTimeout(function () {
+      navTimer = null;
+      doNav(location.pathname + location.search);
+    }, 90);
+  });
+
+  // Links MÉT eigen hx-get + hx-push-url (post-card/post-tile/topnav/…) lopen NIET
+  // via de boost hierboven, en hx-push-url is een no-op nu htmx-history uitstaat.
+  // Doe daarom de adresbalk-update hier zelf zodra htmx swapt. Programmatische
+  // htmx.ajax-calls (boost/popstate) hebben geen elt met hx-push-url → geen dubbel.
+  document.body.addEventListener('htmx:beforeRequest', function (evt) {
+    try {
+      var elt = evt.detail && evt.detail.elt;       // het TRIGGERENDE element (de link)
+      if (!elt || !elt.closest) return;
+      var node = elt.closest('[hx-push-url]');
+      if (!node) return;
+      var u = node.getAttribute('hx-push-url');
+      if (!u || u === 'false') return;
+      if (u !== (location.pathname + location.search)) history.pushState({ b: 1 }, '', u);
+      lastPath = u;
+    } catch (_) {}
+  });
+
+  // Spring naar boven na ELKE navigatie-swap van #pcms-main. De boost hierboven
+  // scrollt al, maar links met hun eigen hx-get (post-nav Newer/Older, post-kaarten)
+  // lopen NIET via de boost → zonder dit blijf je op de oude scrollpositie hangen
+  // bij het openen van een gerelateerde/volgende post. Alleen #pcms-main, zodat
+  // in-page swaps (comments e.d.) en de OOB-chrome-swap niet meescrollen.
+  document.body.addEventListener('htmx:afterSwap', function (evt) {
+    var t = evt.detail && evt.detail.target;
+    if (t && t.id === 'pcms-main') { try { window.scrollTo(0, 0); } catch (_) {} }
+  });
+})();
+</script>
+
+<!-- Mobiel toetsenbord vs. site-layout: zet body.kb-open zodra het toetsenbord
+     open is (visual viewport fors korter dan het venster) ÉN er een invoerveld
+     focus heeft. CSS verbergt dan de vaste onderbalken (bottom-tab + mini-speler)
+     zodat ze niet over het invoerveld zweven. -->
+<script>
+(function () {
+  var vv = window.visualViewport;
+  if (!vv) return;
+  function isField(el) {
+    if (!el) return false;
+    var t = el.tagName;
+    return t === 'INPUT' || t === 'TEXTAREA' || el.isContentEditable;
+  }
+  function update() {
+    var open = (window.innerHeight - vv.height) > 150 && isField(document.activeElement);
+    document.body.classList.toggle('kb-open', open);
+  }
+  vv.addEventListener('resize', update);
+  vv.addEventListener('scroll', update);
+  document.addEventListener('focusin', function () { setTimeout(update, 60); });
+  document.addEventListener('focusout', function () { setTimeout(update, 60); });
+})();
+</script>
+
+<!-- Afbeeldingen lastiger op te slaan: rechtsklik-menu + slepen blokkeren op <img>.
+     Frictie, geen echte beveiliging (DevTools/screenshot blijven kunnen). -->
+<script>
+(function () {
+  document.addEventListener('contextmenu', function (e) {
+    if (e.target && e.target.tagName === 'IMG') e.preventDefault();
+  });
+  document.addEventListener('dragstart', function (e) {
+    if (e.target && e.target.tagName === 'IMG') e.preventDefault();
+  });
+})();
+</script>
+
+<!-- Auto-resize: elk <textarea> groeit mee met de inhoud i.p.v. intern te scrollen
+     (scroll-binnen-scroll is verwarrend). Site-breed; ook na htmx-swaps. -->
+<script>
+(function () {
+  function autoSize(ta) {
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    // Skip hidden textareas (e.g. inside a closed <details> or an unopened reply
+    // box): measuring scrollHeight there yields a bad height that sticks as inline
+    // style and makes the field open huge. They get sized on focus once visible.
+    if (ta.offsetParent === null && ta.offsetHeight === 0) return;
+    ta.style.height = 'auto';
+    var maxH = parseFloat(getComputedStyle(ta).maxHeight);
+    var sh = ta.scrollHeight;
+    var h = (maxH && !isNaN(maxH)) ? Math.min(sh, maxH) : sh;   // respect a CSS max-height
+    ta.style.height = h + 'px';
+    ta.style.overflowY = sh > h ? 'auto' : 'hidden';
+  }
+  function sizeAll(root) {
+    (root || document).querySelectorAll('textarea').forEach(autoSize);
+  }
+  document.addEventListener('input', function (e) { autoSize(e.target); });
+  document.addEventListener('focusin', function (e) { autoSize(e.target); });
+  // Init + opnieuw na htmx-navigatie/partials.
+  sizeAll();
+  document.body.addEventListener('htmx:afterSettle', function () { sizeAll(); });
+  window.addEventListener('load', function () { sizeAll(); });
+})();
+</script>
+
+<!-- PWA install prompt — show button when browser fires beforeinstallprompt -->
+<script>
+(function() {
+  var btn = document.getElementById('pwa-install-btn');
+  if (!btn) return;
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferred = e;
+    btn.hidden = false;
+  });
+  btn.addEventListener('click', async function() {
+    if (!deferred) return;
+    btn.hidden = true;
+    deferred.prompt();
+    try { await deferred.userChoice; } catch(e) {}
+    deferred = null;
+  });
+  window.addEventListener('appinstalled', function() {
+    btn.hidden = true;
+    deferred = null;
+  });
+})();
+</script>
+
+<!-- NSFW / sensitive content: click a veil/reveal to un-blur. Capture-phase so the
+     click reveals instead of following the card link or firing htmx navigation. -->
+<script>
+// Cover fade-in: a cover image that's still loading is hidden so the accent-gradient
+// placeholder behind it shows; it fades in once loaded. Cached/complete images stay
+// visible (no flash). Runs on load + htmx swaps.
+(function () {
+  if (window.__coverFadeWired) return; window.__coverFadeWired = true;
+  function scan(root) {
+    (root || document).querySelectorAll('img.grid-tile-img, .post-list-cover img, .tl-media-img img').forEach(function (img) {
+      if (img.dataset.fade) return; img.dataset.fade = '1';
+      if (img.complete && img.naturalWidth > 0) return;   // already loaded → leave visible
+      img.classList.add('is-loading');
+      var done = function () { img.classList.remove('is-loading'); };
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
+    });
+  }
+  scan(document);
+  document.body.addEventListener('htmx:afterSettle', function (e) { scan(e.target); });
+})();
+
+// Light anti-grab friction: suppress the right-click menu on visual media (covers, images,
+// videos) so the art isn't one right-click away from "Save as". Friction, NOT protection —
+// the files are public and reachable via devtools/network. Middle/Ctrl-click (open in new
+// tab) still works; only the context menu is blocked. Delegated → covers htmx-swapped content.
+(function () {
+  if (window.__noMediaCtxWired) return; window.__noMediaCtxWired = true;
+  document.addEventListener('contextmenu', function (e) {
+    if (e.target.closest('img, video, .grid-tile, .post-list-cover, .post-cover, .tl-media-img')) {
+      e.preventDefault();
+    }
+  });
+})();
+
+// iOS animated-cover → video: an animated WebP is janky on iOS Safari, so on iOS we swap any
+// <img data-ios-mp4="…"> for a muted, looping, inline <video> (the WebP's matching MP4). Every
+// other browser keeps the crisp WebP. Runs on load + htmx swaps.
+(function () {
+  if (window.__iosVideoWired) return; window.__iosVideoWired = true;
+  var ua = navigator.userAgent || '';
+  var IS_IOS = /iP(hone|od|ad)/.test(navigator.platform || '') || /iPad|iPhone|iPod/.test(ua) ||
+               (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); // iPadOS reports as Mac
+  if (!IS_IOS) return;
+  function swap(root) {
+    (root || document).querySelectorAll('img[data-ios-mp4]').forEach(function (img) {
+      var mp4 = img.getAttribute('data-ios-mp4');
+      if (!mp4 || img.dataset.iosSwapped) return;
+      img.dataset.iosSwapped = '1';
+      var v = document.createElement('video');
+      v.src = mp4; v.muted = true; v.loop = true; v.autoplay = true;
+      v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
+      v.poster = img.getAttribute('src') || '';
+      v.className = img.className;
+      if (img.getAttribute('style')) v.setAttribute('style', img.getAttribute('style'));
+      if (img.parentNode) img.parentNode.replaceChild(v, img);
+      var p = v.play && v.play(); if (p && p.catch) p.catch(function () {});
+    });
+  }
+  swap(document);
+  document.body.addEventListener('htmx:afterSettle', function (e) { swap(e.target); });
+})();
+</script>
+
+<script>
+(function () {
+  if (window.__nsfwWired) return; window.__nsfwWired = true;
+  document.addEventListener('click', function (e) {
+    var hit = e.target.closest && e.target.closest('.nsfw-veil, .nsfw-reveal');
+    if (!hit) return;
+    e.preventDefault(); e.stopPropagation();
+    var box = hit.closest('.nsfw-media, .nsfw-gate');
+    if (box) box.classList.add('is-shown');
+  }, true);
+})();
+</script>
+
+<script>
+// Delegated replacements for inline on* handlers, so the CSP needs no
+// script-src-attr 'unsafe-inline'. Document-level → also covers htmx-swapped content.
+(function () {
+  if (window.__pcmsHandlersWired) return; window.__pcmsHandlersWired = true;
+  // Confirm before submitting a form that carries data-confirm.
+  document.addEventListener('submit', function (e) {
+    var f = e.target;
+    if (f && f.dataset && f.dataset.confirm && !window.confirm(f.dataset.confirm)) e.preventDefault();
+  });
+  // Auto-submit a form / switch language when a <select> changes.
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    if (!el || !el.dataset) return;
+    if (el.dataset.autosubmit !== undefined && el.form) el.form.submit();
+    else if (el.dataset.langSwitch !== undefined) {
+      location.href = '/lang/' + encodeURIComponent(el.value) + '?r=' + encodeURIComponent(location.pathname + location.search);
+    }
+  });
+  // Misc click helpers (select-all in a field, history-back button).
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest && e.target.closest('[data-selectall],[data-back],[data-share]');
+    if (!el) return;
+    if (el.dataset.selectall !== undefined && el.select) el.select();
+    if (el.dataset.back !== undefined) { e.preventDefault(); history.back(); }
+    if (el.dataset.share !== undefined) {
+      e.preventDefault();
+      var url = location.href, title = el.dataset.shareTitle || document.title;
+      if (navigator.share) { navigator.share({ title: title, url: url }).catch(function () {}); }
+      else if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () {
+          var fb = document.getElementById('post-share-feedback');
+          if (fb) { fb.hidden = false; setTimeout(function () { fb.hidden = true; }, 2000); }
+        }).catch(function () { window.prompt('Copy link:', url); });
+      } else { window.prompt('Copy link:', url); }
+    }
+  });
+  // Image fallback (the error event doesn't bubble → capture phase).
+  document.addEventListener('error', function (e) {
+    var el = e.target;
+    if (el && el.tagName === 'IMG' && el.dataset && el.dataset.fallback !== undefined && el.parentElement) {
+      el.parentElement.innerHTML = '<span class="pl-cover-empty">⚠️</span>';
+    }
+  }, true);
+})();
+</script>
+
+<!-- Per-site custom footer HTML -->
+<% if (safeSite.custom_foot_html) { %>
+<%- safeSite.custom_foot_html %>
+<% } %>
+
+</body>
+</html>

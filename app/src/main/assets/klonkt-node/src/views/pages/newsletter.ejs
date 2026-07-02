@@ -1,0 +1,54 @@
+<%
+  var _site = site || {};
+  var _title = _site.title || t('news.this_artist');
+  var st = (typeof nlState !== 'undefined') ? nlState : 'form';
+%>
+<section class="nl">
+  <div class="nl-card">
+    <% if (st === 'form') { %>
+      <h1 class="nl-h1"><%= t('news.form_title') %></h1>
+      <p class="nl-sub"><%= t('news.form_sub_before') %><strong><%= _title %></strong><%= t('news.form_sub_after') %></p>
+      <form method="POST" action="<%= siteUrlBase %>/nieuwsbrief" class="nl-form">
+        <input type="email" name="email" required placeholder="<%= t('news.email_ph') %>" value="<%= (typeof nlPrefill !== 'undefined') ? nlPrefill : '' %>" autocomplete="email">
+        <button type="submit" class="nl-btn"><%= t('news.subscribe') %></button>
+      </form>
+    <% } else if (st === 'check') { %>
+      <h1 class="nl-h1"><%= t('news.check_title') %></h1>
+      <p class="nl-sub"><%= t('news.check_sub_before') %><strong><%= (typeof nlEmail!=='undefined')?nlEmail:t('news.your_address') %></strong><%= t('news.check_sub_after') %></p>
+    <% } else if (st === 'done') { %>
+      <h1 class="nl-h1"><%= t('news.done_title') %></h1>
+      <p class="nl-sub"><%= t('news.done_sub_before') %><strong><%= _title %></strong><%= t('news.done_sub_after') %></p>
+    <% } else if (st === 'confirmed') { %>
+      <h1 class="nl-h1"><%= t('news.confirmed_title') %></h1>
+      <p class="nl-sub"><%= t('news.confirmed_sub_before') %><strong><%= _title %></strong><%= t('news.confirmed_sub_after') %></p>
+    <% } else if (st === 'unsubbed') { %>
+      <h1 class="nl-h1"><%= t('news.unsubbed_title') %></h1>
+      <p class="nl-sub"><%= t('news.unsubbed_sub') %></p>
+    <% } else if (st === 'invalid') { %>
+      <h1 class="nl-h1"><%= t('news.invalid_title') %></h1>
+      <p class="nl-sub"><%= t('news.invalid_sub') %></p>
+      <p><a class="nl-btn nl-btn-ghost" href="<%= siteUrlBase %>/nieuwsbrief"><%= t('news.back') %></a></p>
+    <% } else if (st === 'smtperror') { %>
+      <h1 class="nl-h1"><%= t('news.smtperror_title') %></h1>
+      <p class="nl-sub"><%= t('news.smtperror_sub') %></p>
+    <% } else if (st === 'badtoken') { %>
+      <h1 class="nl-h1"><%= t('news.badtoken_title') %></h1>
+      <p class="nl-sub"><%= t('news.badtoken_sub') %></p>
+      <p><a class="nl-btn nl-btn-ghost" href="<%= siteUrlBase %>/nieuwsbrief"><%= t('news.to_subscribe') %></a></p>
+    <% } else { %>
+      <h1 class="nl-h1"><%= t('news.error_title') %></h1>
+      <p class="nl-sub"><%= t('news.error_sub') %></p>
+    <% } %>
+  </div>
+</section>
+
+<style>
+  .nl { max-width: 560px; margin: 0 auto; padding: 48px 18px; }
+  .nl-card { border: 1px solid rgba(128,128,128,.2); border-radius: 18px; padding: 32px 28px; }
+  .nl-h1 { font-size: clamp(24px, 5vw, 34px); margin: 0 0 10px; }
+  .nl-sub { font-size: 15.5px; line-height: 1.6; opacity: .85; margin: 0 0 20px; }
+  .nl-form { display: flex; gap: 10px; flex-wrap: wrap; }
+  .nl-form input { flex: 1 1 220px; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(128,128,128,.4); background: transparent; color: inherit; font-size: 15px; }
+  .nl-btn { padding: 12px 20px; border-radius: 10px; border: none; background: var(--accent, #6b8f71); color: #fff; font-weight: 600; font-size: 15px; cursor: pointer; text-decoration: none; display: inline-block; }
+  .nl-btn-ghost { background: transparent; color: inherit; border: 1px solid rgba(128,128,128,.4); }
+</style>

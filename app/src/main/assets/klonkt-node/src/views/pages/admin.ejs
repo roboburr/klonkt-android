@@ -1,0 +1,251 @@
+<div class="container admin-page">
+  <h1><%= t('admin.title') %></h1>
+  <%
+    var _premOn = (typeof premiumEnabled !== 'undefined' && premiumEnabled);
+    var _premActive = _premOn && (typeof isPremium !== 'undefined' && isPremium);
+    var _premCls = _premActive ? 'on' : (_premOn ? 'off' : 'free');
+    var _premLbl = _premActive ? ('★ ' + t('adash.prem_active'))
+                 : (_premOn ? ('⚠ ' + t('adash.prem_unlinked'))
+                            : t('adash.prem_layeroff'));
+  %>
+  <a class="prem-badge <%= _premCls %>" href="/admin/settings" title="<%= t('admin.b_settings') %>"><%= _premLbl %></a>
+  <style>
+    .prem-badge{display:inline-flex;align-items:center;gap:.35rem;font-size:.78rem;font-weight:700;letter-spacing:.02em;padding:.3rem .85rem;border-radius:999px;text-decoration:none;border:1px solid transparent;margin:.1rem 0 .3rem}
+    .prem-badge.on{background:rgba(232,176,75,.16);color:var(--accent);border-color:rgba(232,176,75,.45)}
+    .prem-badge.off{background:rgba(239,68,68,.12);color:#ef9a9a;border-color:rgba(239,68,68,.35)}
+    .prem-badge.free{background:var(--paper-2);color:var(--ink-muted);border-color:var(--rule)}
+    .prem-badge:hover{filter:brightness(1.08)}
+  </style>
+  <% if (tenancy === 'hub') { %>
+    <p class="admin-tagline"><%= t('admin.tagline_hub') %></p>
+  <% } else { %>
+    <p class="admin-tagline"><%= t('admin.tagline_solo') %></p>
+  <% } %>
+
+  <nav class="admin-quick-links" aria-label="<%= t('nav.admin') %>">
+    <% if (tenancy === 'hub') { %>
+      <a href="/admin/sites" class="btn"><%= t('admin.b_sites') %></a>
+      <a href="/admin/users" class="btn"><%= t('admin.b_users') %></a>
+      <a href="/admin/media" class="btn"><%= t('admin.b_media') %></a>
+      <% if (typeof audioEnabled === 'undefined' || audioEnabled) { %>
+      <a href="/admin/playlists" class="btn"><%= t('admin.b_playlists') %></a>
+      <% } %>
+      <% if (primarySite) { %><a href="/admin/seo" class="btn"><%= t('admin.b_seo') %></a><% } %>
+      <a href="/admin/settings" class="btn"><%= t('admin.b_settings') %></a>
+    <% } else { %>
+      <a href="/posts/new" class="btn"><%= t('admin.b_newpost') %></a>
+      <a href="/admin/media" class="btn"><%= t('admin.b_media') %></a>
+      <% if (primarySite) { %>
+        <a href="/admin/sites/<%= primarySite.slug %>/edit" class="btn"><%= t('admin.b_look') %></a>
+      <% } else { %>
+        <a href="/admin/sites/new" class="btn"><%= t('admin.b_makesite') %></a>
+      <% } %>
+      <% if (primarySite) { %><a href="/admin/seo" class="btn"><%= t('admin.b_seo') %></a><% } %>
+      <a href="/admin/settings" class="btn"><%= t('admin.b_settings') %></a>
+    <% } %>
+    <% if (typeof premiumUnlocked === 'undefined' || premiumUnlocked) { %>
+      <a href="/admin/stats" class="btn"><%= t('admin.b_stats') %></a>
+      <a href="/admin/newsletter" class="btn"><%= t('admin.b_newsletter') %></a>
+      <% if (tenancy !== 'hub' && primarySite) { %><a href="/pers" class="btn" target="_blank"><%= t('admin.b_perskit') %></a><% } %>
+      <% if (tenancy !== 'hub' && primarySite) { %><a href="/downloads" class="btn" target="_blank"><%= t('admin.b_downloads') %></a><% } %>
+      <% if (tenancy !== 'hub' && primarySite) { %><a href="/links" class="btn" target="_blank"><%= t('admin.b_linkbio') %></a><% } %>
+      <a href="/admin/shows" class="btn"><%= t('admin.b_agenda') %></a>
+    <% } %>
+    <%# Fediverse pages (News / Notifications / My replies / Blocking) are reached via the
+        "Fediverse" nav button + the bell + the tabbed section — not duplicated here. %>
+    <a href="/admin/updates" class="btn"><%= t('admin.b_updates') %></a>
+    <a href="/admin/handleiding" class="btn"><%= t('admin.b_help') %></a>
+  </nav>
+
+  <div class="admin-stats">
+    <% if (tenancy === 'hub') { %>
+      <div class="stat-card"><div class="stat-num"><%= stats.users %></div><div class="stat-label"><%= t('admin.st_users') %></div></div>
+      <div class="stat-card"><div class="stat-num"><%= stats.sites %></div><div class="stat-label"><%= t('admin.st_sites') %></div></div>
+    <% } %>
+    <div class="stat-card"><div class="stat-num"><%= stats.posts %></div><div class="stat-label"><%= t('admin.st_posts') %></div></div>
+    <div class="stat-card"><div class="stat-num"><%= stats.published %></div><div class="stat-label"><%= t('admin.st_published') %></div></div>
+  </div>
+
+  <% if (typeof posts !== 'undefined' && posts && posts.length) { %>
+    <% var _drafts = posts.filter(function(p){ return p.isDraft; }).length; %>
+    <h2><%= t('admin.sec_posts') %><% if (_drafts) { %> <span class="pl-draftcount"><%= _drafts %> <%= t('admin.draft').toLowerCase() %><%= _drafts === 1 ? '' : 's' %></span><% } %></h2>
+    <ul class="post-admin-list">
+      <% posts.forEach(function(p) { %>
+        <li class="pal-row<%= p.isDraft ? ' is-draft' : '' %>">
+          <a class="pal-title" href="<%= p.editUrl %>">
+            <% if (p.isDraft) { %><span class="pal-badge"><%= t('admin.draft') %></span><% } %>
+            <span class="pal-name"><%= p.title || '(zonder titel)' %></span>
+          </a>
+          <span class="pal-actions">
+            <a class="pal-link" href="<%= p.editUrl %>"><%= t('admin.edit') %></a>
+            <% if (!p.isDraft) { %><a class="pal-link" href="<%= p.viewUrl %>"><%= t('admin.view') %></a><% } %>
+          </span>
+        </li>
+      <% }); %>
+    </ul>
+  <% } %>
+
+  <% if (sites && sites.length) { %>
+    <h2><%= t('admin.sec_sites') %></h2>
+    <table class="admin-table">
+      <thead>
+        <tr><th><%= t('admin.th_slug') %></th><th><%= t('admin.th_title') %></th><th><%= t('admin.th_owner') %></th><th><%= t('admin.th_created') %></th></tr>
+      </thead>
+      <tbody>
+        <% sites.forEach(function(s) { %>
+          <tr>
+            <td><code><%= s.slug %></code></td>
+            <td><%= s.title %></td>
+            <td><%= s.owner_username || '—' %></td>
+            <td><%= formatDate(s.created_at) %></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+
+  <% if (users && users.length) { %>
+    <h2><%= t('admin.sec_users') %></h2>
+    <table class="admin-table">
+      <thead>
+        <tr><th><%= t('admin.th_username') %></th><th><%= t('admin.th_email') %></th><th><%= t('admin.th_role') %></th><th><%= t('admin.th_joined') %></th></tr>
+      </thead>
+      <tbody>
+        <% users.forEach(function(u) { %>
+          <tr>
+            <td><%= u.username %></td>
+            <td><%= u.email %></td>
+            <td><span class="role-pill role-<%= u.role %>"><%= u.role %></span></td>
+            <td><%= formatDate(u.created_at) %></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+
+</div>
+
+<style>
+.admin-page { max-width: 1000px; margin: 3rem auto; padding: 0 1rem; }
+.admin-page h1 { font-family: var(--font-display, serif); font-size: 2rem; margin: 0 0 0.25rem; }
+.admin-page h2 { font-family: var(--font-display, serif); font-size: 1.4rem; margin: 2rem 0 0.75rem; }
+.admin-tagline { color: var(--ink-muted); margin: 0 0 2rem; }
+.admin-tagline em { font-style: normal; opacity: 0.7; }
+
+/* Posts/concepten-lijst */
+.pl-draftcount { font-family: var(--font-ui, system-ui); font-size: 0.8rem; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 0.1rem 0.55rem; border-radius: 99px; vertical-align: middle; }
+.post-admin-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.pal-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.7rem 0.9rem; border: 1px solid var(--rule); border-radius: 10px; background: var(--paper-2); transition: border-color 120ms; }
+.pal-row:hover { border-color: var(--accent); }
+.pal-row.is-draft { border-left: 3px solid var(--accent); }
+.pal-title { display: inline-flex; align-items: center; gap: 0.6rem; min-width: 0; color: var(--ink); text-decoration: none; font-weight: 600; }
+.pal-title:hover { color: var(--accent); }
+.pal-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-badge { flex-shrink: 0; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 0.1rem 0.5rem; border-radius: 99px; }
+.pal-actions { display: flex; gap: 0.75rem; flex-shrink: 0; }
+.pal-link { color: var(--ink-muted); font-size: 0.85rem; text-decoration: none; white-space: nowrap; }
+.pal-link:hover { color: var(--accent); text-decoration: underline; }
+
+/* Quick-links grid — mobile-first.
+   auto-fit + minmax means: as many equal columns as fit, each at least 140px.
+   Mobile (~360-440px): 2 per row.
+   Tablet (~480-700px): 3 per row.
+   Desktop (≥ ~720px): all 5 in a single row. */
+.admin-quick-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.5rem;
+  margin: 0 0 1.5rem;
+  padding: 0;
+}
+.admin-quick-links .btn {
+  justify-content: center;
+  padding: 0.7rem 0.9rem;
+  font-weight: 600;
+  text-align: center;
+}
+.admin-quick-links .btn:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--paper-2));
+  border-color: var(--accent);
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.stat-card {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  text-align: center;
+}
+.stat-num {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  font-family: var(--font-display, serif);
+}
+.stat-label {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.admin-table th, .admin-table td {
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  border-bottom: 1px solid var(--rule);
+}
+.admin-table th {
+  background: var(--paper);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+}
+.admin-table tr:last-child td { border-bottom: 0; }
+.admin-table code { background: var(--paper); padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.85rem; }
+
+.role-pill {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--paper);
+  color: var(--ink-muted);
+}
+.role-pill.role-god { background: var(--accent); color: white; }
+.role-pill.role-admin { background: var(--paper); color: var(--accent); border: 1px solid var(--accent); }
+
+.admin-todo {
+  margin: 2rem 0 0;
+  padding: 0.75rem 1rem;
+  background: var(--paper-2);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+}
+
+@media (max-width: 600px) {
+  .admin-table { font-size: 0.85rem; }
+  .admin-table th, .admin-table td { padding: 0.45rem 0.6rem; }
+}
+</style>

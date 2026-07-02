@@ -1,0 +1,58 @@
+<%# Archief — altijd de chronologische jaar/maand-lijst. Het archief negeert
+    bewust de timeline/grid-keuze (geen grid-weergave): de view-switcher is hier
+    grijs en springt bij klik terug naar de feed. Zie de CSS in style.css. %>
+
+<!-- ========== TIJDLIJN (jaar/maand gegroepeerd) ========== -->
+<div class="container archive-page feed-timeline">
+  <% var _archBase = (typeof siteUrlBase !== 'undefined' && siteUrlBase) ? siteUrlBase : ''; %>
+  <p class="archive-back-row">
+    <a href="<%= _archBase %>/" class="btn archive-back"
+       hx-get="<%= _archBase %>/?partial=1" hx-target="#pcms-main"
+       hx-push-url="<%= _archBase %>/" hx-indicator="#pcms-loading">&larr; <%= t('parch.back') %></a>
+  </p>
+  <h1><%= t('parch.title') %></h1>
+  <p class="archive-meta"><%= totalPosts === 1 ? t('parch.count_one', { n: totalPosts }) : t('parch.count_many', { n: totalPosts }) %></p>
+
+  <% if (totalPosts === 0) { %>
+    <p class="empty-state"><%= t('parch.empty') %></p>
+  <% } %>
+
+  <% Object.keys(grouped).sort((a,b) => b - a).forEach(year => { %>
+    <section class="archive-year">
+      <h2><%= year %></h2>
+      <% Object.keys(grouped[year]).forEach(month => { %>
+        <div class="archive-month">
+          <h3><%= month %></h3>
+          <ul>
+            <% grouped[year][month].forEach(post => { %>
+              <li>
+                <a href="/<%= post.slug %>"
+                   hx-get="/<%= post.slug %>?partial=1" hx-target="#pcms-main"
+                   hx-push-url="/<%= post.slug %>" hx-indicator="#pcms-loading">
+                  <%= post.title %>
+                </a>
+                <span class="archive-author">— <%= post.author_username %></span>
+              </li>
+            <% }); %>
+          </ul>
+        </div>
+      <% }); %>
+    </section>
+  <% }); %>
+</div>
+
+<style>
+.archive-page { max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+.archive-back-row { margin: 0 0 1rem; }
+.archive-page h1 { font-family: var(--font-display, serif); margin: 0 0 0.25rem; }
+.archive-meta { color: var(--ink-muted); margin-bottom: 2rem; }
+.archive-year { margin-bottom: 2.5rem; }
+.archive-year h2 { font-family: var(--font-display, serif); font-size: 1.8rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--accent); margin: 0 0 1rem; }
+.archive-month { margin: 1.5rem 0 1.5rem 1rem; }
+.archive-month h3 { font-size: 1.05rem; color: var(--ink-muted); text-transform: capitalize; margin: 0 0 0.5rem; font-weight: 500; }
+.archive-page ul { list-style: none; padding: 0 0 0 1rem; margin: 0; }
+.archive-page li { padding: 0.4rem 0; }
+.archive-page a { color: var(--ink); text-decoration: none; font-weight: 500; }
+.archive-page a:hover { color: var(--accent); }
+.archive-author { color: var(--ink-muted); font-size: 0.85rem; margin-left: 0.5rem; }
+</style>

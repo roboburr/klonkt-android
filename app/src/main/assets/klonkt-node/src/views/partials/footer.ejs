@@ -1,0 +1,160 @@
+<footer class="site-footer">
+  <% if (typeof footerNewsletter !== 'undefined' && footerNewsletter && (typeof premiumUnlocked === 'undefined' || premiumUnlocked) && typeof site !== 'undefined' && site) { %>
+    <div class="container footer-nl">
+      <span class="footer-nl-label">📬 <%= t('footer.subscribe_cta') %></span>
+      <form method="post" action="<%= (typeof siteUrlBase !== 'undefined' && siteUrlBase) ? siteUrlBase : '' %>/nieuwsbrief" class="footer-nl-form">
+        <input type="email" name="email" required placeholder="<%= t('common.email_placeholder') %>" autocomplete="email" aria-label="E-mailadres">
+        <button type="submit"><%= t('footer.subscribe') %></button>
+      </form>
+    </div>
+  <% } %>
+  <div class="container site-footer-inner">
+    <div>
+      <span>© <%= new Date().getFullYear() %> <%= (site && site.title) || 'Klonkt' %></span>
+    </div>
+    <%# Install-app button — placed in the footer row (centre), saves a whole extra row.
+        JS detects the platform & opens a modal with PWA install steps. %>
+    <button type="button" class="install-app-btn install-app-btn--footer" data-pcms-install-app>
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 20h14v-2H5v2zm7-18L5.33 9h3.84v6h5.66V9h3.84L12 2z" fill="currentColor"/></svg>
+      <span><%= t('footer.install') %></span>
+    </button>
+    <div class="footer-meta">
+      <% if (typeof langs !== 'undefined' && langs && langs.length > 1) { %>
+        <select class="footer-lang" aria-label="<%= t('nav.language') %>"
+                data-lang-switch>
+          <% langs.forEach(function(l){ %><option value="<%= l.code %>"<%= l.active ? ' selected' : '' %>><%= l.name %></option><% }); %>
+        </select>
+      <% } %>
+      <a class="footer-version" href="<%= (typeof siteUrlBase !== 'undefined' && siteUrlBase) ? siteUrlBase : '' %>/changelog" title="Bekijk wat er per release veranderd is">Klonkt<%= (typeof appVersion !== 'undefined' && appVersion) ? ' v' + appVersion : '' %></a>
+      <%# Mobile-only theme toggle. On desktop the topnav has its own toggle
+          so we hide this one to avoid two visible toggles at once. The same
+          toggleTheme handler in topnav.ejs picks this button up by id. %>
+      <button type="button" class="footer-theme-toggle" id="theme-toggle-footer"
+              aria-label="Thema wisselen" title="Thema wisselen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+</footer>
+
+<style>
+/* Make sure the page itself is at least viewport-tall so the flex sticky-
+   footer logic (body display:flex, main flex:1) can push the footer down.
+   100dvh is dynamic viewport height — handles mobile address-bar collapse. */
+html { min-height: 100dvh; }
+
+.site-footer {
+  border-top: 1px solid var(--rule);
+  margin-top: 4rem;
+  padding: 2rem 0;
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0));
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  background: var(--paper);
+  /* When fixed bars (mini-player / bottom-tab) sit at the bottom of the
+     viewport they overlap the footer at scroll-end. The clearance below
+     mirrors the .pcms-main rule in audio.css — content goes at the top of
+     the footer, the player floats over the empty padding underneath. */
+  transition: padding-bottom .2s ease;
+}
+/* Audio player visible (desktop, no bottom-tab): clear ~80px */
+body.has-audio-player .site-footer {
+  padding-bottom: calc(2rem + 80px + env(safe-area-inset-bottom, 0));
+}
+@media (max-width: 767px) {
+  /* Bottom-tab visible alone: ~56px tab */
+  body.has-bottom-tab .site-footer {
+    padding-bottom: calc(2rem + 56px + env(safe-area-inset-bottom, 0));
+  }
+  /* Bottom-tab + audio-player stacked: ~56px tab + ~72px player */
+  body.has-bottom-tab.has-audio-player .site-footer {
+    padding-bottom: calc(2rem + 56px + 72px + env(safe-area-inset-bottom, 0));
+  }
+}
+.footer-nl {
+  max-width: 800px; margin: 0 auto 1.5rem; padding: 0 1rem;
+  display: flex; align-items: center; justify-content: center; gap: .8rem; flex-wrap: wrap;
+}
+.footer-nl-label { font-weight: 600; color: var(--ink); }
+.footer-nl-form { display: flex; gap: .5rem; flex-wrap: wrap; }
+.footer-nl-form input {
+  padding: .5rem .7rem; border-radius: 8px; border: 1px solid var(--rule);
+  background: var(--paper); color: var(--ink); font-size: .9rem; min-width: 200px;
+}
+.footer-nl-form button {
+  padding: .5rem 1rem; border-radius: 8px; border: none; cursor: pointer;
+  background: var(--accent); color: #fff; font-weight: 600; font-size: .9rem;
+}
+@media (max-width: 600px) { .footer-nl { flex-direction: column; } .footer-nl-form input { min-width: 0; flex: 1; } }
+
+.site-footer-inner {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.footer-meta {
+  font-size: 0.8rem; opacity: 0.7;
+  display: inline-flex; align-items: center; gap: 0.75rem;
+}
+.footer-lang {
+  background: transparent; color: var(--ink); opacity: 1;
+  border: 1px solid var(--rule); border-radius: 999px;
+  padding: 0.3rem 0.5rem; font-size: 0.78rem; cursor: pointer;
+  font-family: inherit;
+}
+.footer-lang:hover { border-color: var(--accent); }
+/* Make open dropdown options readable (otherwise white-on-white in dark mode). */
+.footer-lang option { background: var(--paper); color: var(--ink); }
+/* On desktop the language picker lives in the header nav → hide the footer version. */
+@media (min-width: 768px) { .footer-lang { display: none; } }
+.footer-version { color: inherit; text-decoration: none; }
+.footer-version:hover { color: var(--accent); text-decoration: underline; }
+.pcms-main { min-height: 50vh; }
+
+/* Mobile theme toggle in footer. Pill-style button matching topnav nav-btn.
+   Hidden on desktop; the topnav already has a toggle there. */
+.footer-theme-toggle {
+  display: none;
+  align-items: center; justify-content: center;
+  width: 36px; height: 36px;
+  padding: 0; margin: 0;
+  background: transparent; color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 120ms, border-color 120ms;
+  -webkit-tap-highlight-color: transparent;
+  opacity: 1; /* override .footer-meta dim */
+}
+.footer-theme-toggle:hover { background: var(--paper-2); border-color: var(--accent); }
+.footer-theme-toggle:active { transform: scale(0.96); }
+.footer-theme-toggle svg { width: 18px; height: 18px; }
+
+@media (max-width: 768px) {
+  .footer-theme-toggle { display: inline-flex; }
+}
+
+/* Compact install button inside the footer row (centre) instead of a large standalone
+   CTA on its own line — saves vertical space. */
+.install-app-btn--footer {
+  flex: 0 0 auto;
+  width: auto !important;          /* override the mobile .install-app-btn width:100% */
+  padding: 0.42rem 0.95rem;
+  font-size: 0.82rem;
+  gap: 0.4rem;
+}
+.install-app-btn--footer svg { width: 15px; height: 15px; }
+/* On narrow screens: let the three items centre neatly when they wrap. */
+@media (max-width: 600px) {
+  .site-footer-inner { justify-content: center; text-align: center; }
+}
+</style>

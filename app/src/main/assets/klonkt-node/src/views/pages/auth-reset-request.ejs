@@ -1,0 +1,40 @@
+<div class="container auth-page">
+  <h1><%= t('arrq.title') %></h1>
+
+  <% if (sent) { %>
+    <div class="alert alert-success">
+      <%= t('arrq.sent') %>
+    </div>
+    <% if (devResetUrl) { %>
+      <div class="alert alert-info">
+        <%- t('arrq.no_mailserver') %>
+        <p style="margin: 0.5rem 0 0; word-break: break-all;">
+          <a href="<%= devResetUrl %>"><%= devResetUrl %></a>
+        </p>
+      </div>
+    <% } %>
+    <% if (typeof mailer !== 'undefined' && !mailer) { %>
+      <p class="auth-link-muted"><%- t('arrq.no_mail_cli') %></p>
+    <% } %>
+    <p class="auth-link"><a href="/auth/login"><%= t('arrq.back_login') %></a></p>
+  <% } else { %>
+    <p class="auth-tagline"><%= t('arrq.tagline') %></p>
+
+    <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+
+    <form method="post" action="/auth/reset-request" class="auth-form">
+      <label>
+        <span><%= t('arrq.email') %></span>
+        <input type="email" name="email" required autofocus autocomplete="email">
+      </label>
+      <button type="submit" class="btn btn-primary"><%= t('arrq.submit') %></button>
+      <p class="auth-link"><a href="/auth/login"><%= t('arrq.back_login') %></a></p>
+    </form>
+  <% } %>
+</div>
+
+<style>
+.auth-tagline { text-align: center; color: var(--ink-muted, var(--ink-soft)); margin-bottom: 1.5rem; }
+.alert-info { background: var(--paper-2); color: var(--ink); border: 1px solid var(--accent); border-radius: 5px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
+.auth-link-muted { font-size: 0.85rem; color: var(--ink-muted, var(--ink-soft)); }
+</style>

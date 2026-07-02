@@ -1,0 +1,333 @@
+<div class="container ax-page">
+
+  <header class="ax-header">
+    <a href="/" class="ax-back" aria-label="<%= t('acct.back_home') %>">←</a>
+    <div>
+      <h1><%= t('acct.title') %></h1>
+      <p class="ax-tagline"><%= t('acct.subtitle') %></p>
+    </div>
+  </header>
+
+  <% if (success) { %><div class="ax-flash ax-flash-ok"><%= success %></div><% } %>
+  <% if (error)   { %><div class="ax-flash ax-flash-err"><%= error %></div><% } %>
+
+  <% if (isViewer) { %>
+    <div class="ax-viewer-note" role="note">
+      <span class="ax-viewer-ico" aria-hidden="true">👁️</span>
+      <div>
+        <strong><%= t('acct.viewer_mode') %></strong>
+        <span><%= t('acct.viewer_note') %></span>
+      </div>
+    </div>
+  <% } %>
+
+  <%# ── PROFILE ────────────────────────────────────────────── %>
+  <section class="ax-card">
+    <div class="ax-card-title"><%= t('acct.profile') %></div>
+
+    <div class="ax-profile-id">
+      <span class="ax-profile-avatar ax-profile-avatar-static">
+        <% var _av = (typeof siteAvatar !== 'undefined' ? siteAvatar : null); %>
+        <% if (_av) { %>
+          <img src="<%= avatar(_av, 128) %>" alt="">
+        <% } else { %>
+          <span><%= account.username.charAt(0).toUpperCase() %></span>
+        <% } %>
+      </span>
+      <div class="ax-profile-meta">
+        <div class="ax-profile-name"><%= account.username %></div>
+        <div class="ax-profile-role"><%= account.role %> · <%= account.email %></div>
+        <% if (account.created_at) { %>
+          <div class="ax-profile-joined"><%= t('acct.member_since') %> <%= formatDate(account.created_at) %></div>
+        <% } %>
+        <% if (canMutate) { %>
+          <div class="ax-profile-joined"><%- t('acct.photo_site_hint') %></div>
+        <% } %>
+      </div>
+    </div>
+
+    <% if (canMutate) { %>
+      <form action="/account/profile" method="post" class="ax-form ax-form-bio">
+        <label class="ax-field">
+          <span><%= t('acct.username') %></span>
+          <input type="text" name="username" value="<%= account.username %>" minlength="2" maxlength="30" pattern="[A-Za-z0-9_\-]{2,30}" autocomplete="username">
+        </label>
+        <label class="ax-field">
+          <span><%= t('acct.email') %></span>
+          <input type="email" name="email" value="<%= account.email || '' %>" maxlength="254" autocomplete="email" placeholder="<%= t('acct.email_ph') %>">
+        </label>
+        <label class="ax-field">
+          <span><%= t('acct.bio') %></span>
+          <textarea name="bio" rows="3" maxlength="500" placeholder="<%= t('acct.bio_ph') %>"><%= account.bio || '' %></textarea>
+        </label>
+        <div class="ax-form-actions">
+          <button type="submit" class="ax-btn ax-btn-primary"><%= t('acct.save') %></button>
+        </div>
+      </form>
+    <% } else { %>
+      <div class="ax-form ax-form-bio">
+        <label class="ax-field">
+          <span><%= t('acct.bio') %></span>
+          <textarea rows="3" disabled placeholder="<%= t('acct.bio_empty') %>"><%= account.bio || '' %></textarea>
+        </label>
+      </div>
+    <% } %>
+  </section>
+
+  <%# ── PERSONAL LANGUAGE ──────────────────────────────────── %>
+  <% if (canMutate) { %>
+  <section class="ax-card">
+    <div class="ax-card-title"><%= t('acct.lang_label') %></div>
+    <form action="/account/lang" method="post" class="ax-form">
+      <label class="ax-field">
+        <span><%= t('acct.lang_label') %> <small><%= t('acct.lang_hint') %></small></span>
+        <select name="lang">
+          <% langs.forEach(function(l){ var sel = (account && account.lang) ? (account.lang === l.code) : l.active; %>
+            <option value="<%= l.code %>"<%= sel ? ' selected' : '' %>><%= l.name %></option>
+          <% }); %>
+        </select>
+      </label>
+      <div class="ax-form-actions">
+        <button type="submit" class="ax-btn ax-btn-primary"><%= t('acct.save') %></button>
+      </div>
+    </form>
+  </section>
+  <% } %>
+
+  <%# ── SITE (owner may update their site name) ─────────── %>
+  <% if (typeof editableSite !== 'undefined' && editableSite && canMutate) { %>
+  <section class="ax-card">
+    <div class="ax-card-title"><%= t('acct.site') %></div>
+    <form action="/account/site" method="post" class="ax-form">
+      <label class="ax-field">
+        <span><%= t('acct.site_name') %> <small><%= t('acct.site_name_hint') %></small></span>
+        <input type="text" name="site_title" value="<%= editableSite.title || '' %>" maxlength="200" required>
+      </label>
+      <label class="ax-field">
+        <span><%= t('acct.tagline') %> <small><%= t('acct.tagline_hint') %></small></span>
+        <input type="text" name="site_tagline" value="<%= editableSite.tagline || '' %>" maxlength="200">
+      </label>
+      <div class="ax-form-actions">
+        <button type="submit" class="ax-btn ax-btn-primary"><%= t('acct.site_save') %></button>
+      </div>
+    </form>
+  </section>
+  <% } %>
+
+  <%# ── PASSWORD ──────────────────────────────────────────── %>
+  <%# In viewer mode there is no password section (nothing to change). %>
+  <% if (canMutate) { %>
+  <% if (hasPassword) { %>
+  <section class="ax-card">
+    <div class="ax-card-title"><%= t('acct.password_change') %></div>
+    <form action="/account/password" method="post" class="ax-form">
+      <label class="ax-field">
+        <span><%= t('acct.password_current') %></span>
+        <input type="password" name="current" required autocomplete="current-password">
+      </label>
+      <div class="ax-row ax-row-2">
+        <label class="ax-field">
+          <span><%= t('acct.password_new') %> <small><%= t('acct.password_min') %></small></span>
+          <input type="password" name="new_password" required minlength="8" autocomplete="new-password">
+        </label>
+        <label class="ax-field">
+          <span><%= t('acct.password_confirm') %></span>
+          <input type="password" name="confirm" required minlength="8" autocomplete="new-password">
+        </label>
+      </div>
+      <div class="ax-form-actions">
+        <button type="submit" class="ax-btn ax-btn-primary"><%= t('acct.password_change') %></button>
+      </div>
+    </form>
+  </section>
+
+  <% } else { %>
+  <section class="ax-card">
+    <div class="ax-card-title"><%= t('acct.login') %></div>
+    <p class="ax-tagline" style="margin:0"><%= t('acct.login_google_only', { email: account.email }) %></p>
+  </section>
+  <% } %>
+  <% } %>
+
+</div>
+
+<style>
+.ax-page { max-width: 720px; margin: 1.5rem auto 4rem; padding: 0 1rem; }
+.ax-header { display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 1.5rem; }
+.ax-header h1 { font-family: var(--font-display, serif); font-size: 1.75rem; margin: 0 0 0.25rem; }
+.ax-tagline { color: var(--ink-muted, var(--ink-soft)); margin: 0; font-size: 0.9rem; }
+.ax-back {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px;
+  border: 1px solid var(--rule); border-radius: 8px;
+  background: var(--paper); color: var(--ink); text-decoration: none;
+  font-size: 1.1rem; flex-shrink: 0; transition: border-color 120ms;
+}
+.ax-back:hover { border-color: var(--accent); }
+
+.ax-flash { padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; }
+.ax-flash-ok  { background: rgba(40,160,90,.15); color: #2a9d5e; border: 1px solid rgba(40,160,90,.3); }
+.ax-flash-err { background: rgba(200,60,60,.15); color: #c33; border: 1px solid rgba(200,60,60,.3); }
+
+/* ─── Kijker-modus notice ──────────────────────────────────────── */
+.ax-viewer-note {
+  display: flex; align-items: flex-start; gap: 0.75rem;
+  padding: 0.85rem 1rem; margin-bottom: 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--rule));
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+}
+.ax-viewer-ico { font-size: 1.1rem; line-height: 1.4; }
+.ax-viewer-note strong { display: block; font-size: 0.92rem; }
+.ax-viewer-note span { color: var(--ink-muted, var(--ink-soft)); font-size: 0.85rem; }
+.ax-profile-avatar-static { flex-shrink: 0; }
+.ax-form-bio textarea:disabled { opacity: 0.7; cursor: default; }
+
+/* ─── Cards ────────────────────────────────────────────────────── */
+.ax-card {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+.ax-card-title {
+  font-family: var(--font-display, serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+/* ─── Form fields ──────────────────────────────────────────────── */
+.ax-form { display: flex; flex-direction: column; gap: 0.85rem; }
+.ax-form-bio { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--rule); }
+.ax-row { display: grid; gap: 0.85rem; }
+.ax-row-2 { grid-template-columns: 1fr 1fr; }
+@media (max-width: 600px) { .ax-row-2 { grid-template-columns: 1fr; } }
+
+.ax-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.ax-field > span {
+  font-size: 0.8rem; font-weight: 600;
+  color: var(--ink-soft);
+  display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap;
+}
+.ax-field > span small { font-weight: 400; color: var(--ink-muted); font-size: 0.95em; }
+.ax-field input[type="text"],
+.ax-field input[type="email"],
+.ax-field input[type="password"],
+.ax-field input[type="url"],
+.ax-field select,
+.ax-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font-family: var(--font-ui, system-ui), sans-serif;
+  font-size: 0.95rem;
+  -webkit-appearance: none; appearance: none;
+  transition: border-color 120ms;
+}
+.ax-field textarea { resize: vertical; min-height: 70px; font-family: inherit; }
+.ax-field input:focus, .ax-field select:focus, .ax-field textarea:focus {
+  outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent);
+}
+
+/* ─── File upload ─────────────────────────────────────────────── */
+.ax-file-control {
+  display: flex; align-items: center; gap: 0.5rem;
+  flex-wrap: wrap;
+  position: relative;
+  min-height: 40px;
+}
+.ax-file-control input[type="file"] {
+  position: absolute; inset: 0;
+  opacity: 0; cursor: pointer;
+  z-index: 2;
+}
+.ax-file-btn { pointer-events: none; }
+.ax-file-name {
+  font-size: 0.85rem;
+  color: var(--ink);
+  word-break: break-all;
+  flex: 1; min-width: 0;
+}
+.ax-file-name[data-empty] { color: var(--ink-muted, var(--ink-soft)); }
+
+.ax-form-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; }
+
+/* ─── Buttons ──────────────────────────────────────────────────── */
+.ax-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--rule); background: var(--paper-2);
+  color: var(--ink);
+  font-family: var(--font-ui, system-ui), sans-serif;
+  font-size: 0.9rem; font-weight: 500;
+  text-decoration: none; border-radius: 6px;
+  cursor: pointer; min-height: 40px;
+  transition: background 120ms, border-color 120ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.ax-btn:hover { border-color: var(--accent); }
+.ax-btn-secondary { background: var(--paper-2); }
+.ax-btn-primary, a.ax-btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ax-btn-primary:hover, a.ax-btn-primary:hover { opacity: 0.92; border-color: var(--accent); color: #fff; }
+
+/* ─── Profile ID row ──────────────────────────────────────────── */
+.ax-profile-id {
+  display: flex; align-items: center; gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 1rem;
+}
+.ax-avatar-form { margin: 0; flex-shrink: 0; }
+.ax-avatar-wrap {
+  position: relative; display: block;
+  width: 84px; height: 84px; cursor: pointer;
+}
+.ax-profile-avatar {
+  width: 84px; height: 84px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--paper-2);   /* neutral so transparent avatars blend */
+  color: var(--accent);          /* accent only for the fallback initial */
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-display, serif);
+  font-size: 1.7rem; font-weight: 600;
+  border: 1px solid var(--rule);
+  transition: border-color 120ms;
+}
+.ax-avatar-wrap:hover .ax-profile-avatar { border-color: var(--accent); }
+.ax-profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ax-avatar-edit {
+  position: absolute; right: -2px; bottom: -2px;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  border: 3px solid var(--paper);
+  transition: transform 120ms;
+}
+.ax-avatar-wrap:hover .ax-avatar-edit { transform: scale(1.08); }
+.ax-avatar-remove { margin-top: 0.45rem; }
+.ax-linkbtn {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--ink-muted, var(--ink-soft)); font-size: 0.8rem; text-decoration: underline;
+  font-family: var(--font-ui, system-ui), sans-serif;
+}
+.ax-linkbtn:hover { color: #c33; }
+.ax-profile-meta { min-width: 0; }
+.ax-profile-name { font-weight: 600; font-size: 1.1rem; }
+.ax-profile-role,
+.ax-profile-joined {
+  color: var(--ink-muted, var(--ink-soft));
+  font-size: 0.85rem;
+}
+
+@media (max-width: 480px) {
+  .ax-profile-id { flex-direction: column; align-items: flex-start; gap: 0.75rem; text-align: left; }
+}
+</style>

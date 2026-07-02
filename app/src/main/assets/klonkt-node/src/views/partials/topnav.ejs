@@ -1,0 +1,578 @@
+<%
+// Top nav — RESPONSIVE.
+//
+// Mobile (<768px):
+//   - Brand centered, small theme-toggle right.
+//   - All other actions live in the bottom-tab nav.
+//   - Sticky top, blur background, safe-area-top respected.
+//
+// Desktop (≥768px):
+//   - Full v9 masthead: brand left, action row right
+//     (Archief / Search / Install / Theme / User-menu).
+//   - bottom-tab is hidden via CSS, so all nav must live here.
+
+const _siteUrlBase = (typeof siteUrlBase !== 'undefined' && siteUrlBase) ? siteUrlBase : '';
+const _isAdmin     = typeof bodyClass !== 'undefined' && bodyClass.indexOf('on-admin') >= 0;
+// Fediverse pages (on-special) get the same top-nav "back to site" treatment as admin.
+const _isSpecial   = typeof bodyClass !== 'undefined' && bodyClass.indexOf('on-special') >= 0;
+const _hasSearch   = !site || site.show_search === undefined || site.show_search;
+const _canPost     = user && (typeof canMutate === 'undefined' || canMutate)
+                     && permissions && permissions.canCreatePost && permissions.canCreatePost(user, site);
+%>
+
+<header class="masthead">
+  <div class="container masthead-inner">
+
+    <!-- Brand block (always visible) -->
+    <div class="masthead-brand">
+      <% if (_isAdmin || _isSpecial) { %>
+        <a href="<%= _siteUrlBase %>/" class="nav-link nav-link-admin"><%= t('nav.back_to_site') %></a>
+      <% } else if (typeof tenancy !== 'undefined' && tenancy === 'hub') { %>
+        <%# Hub: the brand navigates to the hub home via HTMX. The chrome is always
+            rendered in hub mode and hidden on the landing via body.on-hub (CSS), so htmx
+            can switch without a full reload → the audio player stays alive. %>
+        <a class="nav-hub-home" href="/" aria-label="Home" title="Home"
+           hx-get="/?partial=1" hx-target="#pcms-main" hx-swap="innerHTML" hx-push-url="/" hx-indicator="#pcms-loading">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </a>
+      <% } else if (site) { %>
+        <a class="site-title" href="<%= _siteUrlBase %>/"
+           hx-get="<%= _siteUrlBase %>/?partial=1" hx-target="#pcms-main" hx-swap="innerHTML"
+           hx-push-url="<%= _siteUrlBase %>/" hx-indicator="#pcms-loading"><%= site.title %></a>
+      <% } else { %>
+        <a class="site-title" href="/">Klonkt</a>
+      <% } %>
+    </div>
+
+    <!-- Mobile: theme toggle ONLY for logged-out users.
+         Logged-in users get the toggle inside the profile sheet
+         (bottom-tab → Profiel → Thema). All other actions in bottom-tab. -->
+    <% if (!user) { %>
+    <div class="top-nav-mobile">
+      <button type="button" class="nav-btn" id="theme-toggle-mobile" aria-label="Thema wisselen" title="Thema wisselen">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+    </div>
+    <% } %>
+
+    <!-- Desktop-only: full action row -->
+    <nav class="top-nav top-nav-desktop" aria-label="Hoofdnavigatie">
+
+      <% if (!_isAdmin && !_isSpecial) { %>
+        <a class="nav-link" href="<%= _siteUrlBase %>/archive"
+           hx-get="<%= _siteUrlBase %>/archive?partial=1" hx-target="#pcms-main"
+           hx-swap="innerHTML" hx-push-url="<%= _siteUrlBase %>/archive"
+           hx-indicator="#pcms-loading">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v13H3V8"/><rect x="1" y="3" width="22" height="5" rx="1"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+          <span class="nav-label"><%= t('nav.archive') %></span>
+        </a>
+      <% } %>
+
+      <% if (_hasSearch) { %>
+        <button type="button" class="nav-btn" id="search-toggle" aria-label="<%= t('nav.search') %>" title="<%= t('nav.search') %>">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+      <% } %>
+
+      <button type="button" class="nav-btn" id="pwa-install-btn" hidden aria-label="App installeren" title="App installeren">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+
+      <button type="button" class="nav-btn" id="theme-toggle" aria-label="Thema wisselen" title="Thema wisselen">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+
+      <% if (typeof langs !== 'undefined' && langs && langs.length > 1) {
+           var _curLang = (langs.find(function(l){ return l.active; }) || { code: 'nl' }).code;
+           var _langR = (typeof currentPath !== 'undefined' && currentPath) ? currentPath : '/';
+      %>
+        <details class="lang-menu">
+          <summary class="nav-btn lang-toggle" aria-label="<%= t('nav.language') %>" title="<%= t('nav.language') %>">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <span class="lang-code"><%= _curLang.toUpperCase() %></span>
+            <svg class="lang-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="lang-dropdown" role="menu">
+            <% langs.forEach(function(l){ %>
+              <a class="lang-item<%= l.active ? ' is-active' : '' %>" role="menuitem" href="/lang/<%= l.code %>?r=<%= encodeURIComponent(_langR) %>"><span class="lang-item-code"><%= l.code.toUpperCase() %></span><%= l.name %></a>
+            <% }); %>
+          </div>
+        </details>
+      <% } %>
+
+      <% if (user && typeof canManageFedi !== 'undefined' && canManageFedi && apEnabled) { %>
+        <a class="nav-btn nav-notif" href="/notifications" aria-label="<%= t('notif.title') %>" title="<%= t('notif.title') %>"
+           hx-get="/notifications?partial=1" hx-target="#pcms-main" hx-swap="innerHTML" hx-push-url="/notifications" hx-indicator="#pcms-loading">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <% if (typeof notifUnread !== 'undefined' && notifUnread > 0) { %><span class="notif-badge"><%= notifUnread > 9 ? '9+' : notifUnread %></span><% } %>
+        </a>
+      <% } %>
+
+      <% if (user) { %>
+        <details class="user-menu">
+          <summary class="nav-btn user-toggle" aria-label="Gebruikersmenu">
+            <% if (user.avatar_url) { %>
+              <img class="user-avatar user-avatar-img" src="<%= avatar(user.avatar_url, 128) %>" alt="">
+            <% } else { %>
+              <span class="user-avatar"><%= user.username.charAt(0).toUpperCase() %></span>
+            <% } %>
+          </summary>
+          <div class="user-dropdown" role="menu">
+            <div class="user-dropdown-header">
+              <% if (user.avatar_url) { %>
+                <img class="udh-avatar" src="<%= avatar(user.avatar_url, 128) %>" alt="">
+              <% } else { %>
+                <span class="udh-avatar udh-avatar-fallback"><%= user.username.charAt(0).toUpperCase() %></span>
+              <% } %>
+              <div class="udh-meta">
+                <span class="udh-name"><%= user.username %></span>
+                <% if (user.role === 'god') { %>
+                  <span class="udh-role">God</span>
+                <% } else if (user.role === 'admin' || user.role === 'moderator') { %>
+                  <span class="udh-role"><%= user.role.charAt(0).toUpperCase() + user.role.slice(1) %></span>
+                <% } %>
+              </div>
+            </div>
+            <div class="user-dropdown-list">
+              <a href="/account" role="menuitem" class="udi"
+                 hx-get="/account?partial=1" hx-target="#pcms-main" hx-swap="innerHTML"
+                 hx-push-url="/account" hx-indicator="#pcms-loading">
+                <svg class="udi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span><%= t('nav.account') %></span>
+              </a>
+              <% if (typeof canSeeBeheer !== 'undefined' && canSeeBeheer) { %>
+                <a href="/admin" role="menuitem" class="udi"
+                   hx-get="/admin?partial=1" hx-target="#pcms-main" hx-swap="innerHTML"
+                   hx-push-url="/admin" hx-indicator="#pcms-loading">
+                  <svg class="udi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg>
+                  <span><%= t('nav.admin') %></span>
+                </a>
+              <% } %>
+              <% if (_canPost) { %>
+                <a href="<%= _siteUrlBase %>/posts/new" role="menuitem" class="udi"
+                   hx-get="<%= _siteUrlBase %>/posts/new?partial=1" hx-target="#pcms-main" hx-swap="innerHTML"
+                   hx-push-url="<%= _siteUrlBase %>/posts/new" hx-indicator="#pcms-loading">
+                  <svg class="udi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                  <span><%= t('nav.new_post') %></span>
+                </a>
+              <% } %>
+              <% if (typeof canManageFedi !== 'undefined' && canManageFedi && apEnabled) { %>
+                <a href="/news" role="menuitem" class="udi"
+                   hx-get="/news?partial=1" hx-target="#pcms-main" hx-swap="innerHTML"
+                   hx-push-url="/news" hx-indicator="#pcms-loading">
+                  <svg class="udi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                  <span><%= t('nav.fediverse') %></span>
+                </a>
+              <% } %>
+            </div>
+            <div class="user-dropdown-divider" aria-hidden="true"></div>
+            <div class="user-dropdown-list">
+              <a href="/auth/logout" role="menuitem" class="udi udi-danger">
+                <svg class="udi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <span><%= t('nav.logout') %></span>
+              </a>
+            </div>
+          </div>
+        </details>
+      <% } else { %>
+        <a class="nav-link" href="/auth/login"
+           hx-get="/auth/login?partial=1" hx-target="#pcms-main" hx-swap="innerHTML"
+           hx-push-url="/auth/login" hx-indicator="#pcms-loading">
+          <span class="nav-label"><%= t('nav.login') %></span>
+        </a>
+      <% } %>
+
+    </nav>
+  </div>
+</header>
+
+<!-- Search overlay (shared by mobile bottom-tab + desktop top-nav) -->
+<div id="search-overlay" class="search-overlay" hidden data-suggest="<%= _siteUrlBase %>/search/suggest" data-action="<%= _siteUrlBase %>/search">
+  <div class="container">
+    <form class="search-overlay-form" method="get" action="<%= _siteUrlBase %>/search">
+      <input type="search" name="q" placeholder="<%= t('search.placeholder') %>" autocomplete="off">
+      <button type="submit" class="nav-btn" aria-label="<%= t('search.button') %>">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <button type="button" class="nav-btn" id="search-close" aria-label="<%= t('imed.cancel') %>">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </form>
+    <div id="search-suggest" class="search-suggest" data-lenis-prevent></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // Wired ONCE. This chrome (topnav) is re-inserted out-of-band during htmx navigation
+  // → without this guard the script would stack EXTRA listeners on every navigation,
+  // causing the theme toggle to fire 2× (or more) = no net change ("toggle stops working").
+  // Everything below uses event delegation on body/document, so it also works for
+  // buttons that appear after this run (OOB).
+  if (window.__pcmsChromeWired) return;
+  window.__pcmsChromeWired = true;
+
+  function toggleTheme() {
+    var cur = document.documentElement.getAttribute('data-theme') || 'dark';
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('pcms-theme', next); } catch (e) {}
+  }
+  function overlay() { return document.getElementById('search-overlay'); }
+  function openSearch() { var o = overlay(); if (o) { o.hidden = false; var i = o.querySelector('input'); if (i) i.focus(); } }
+  function closeSearch() { var o = overlay(); if (o) { o.hidden = true; var b = document.getElementById('search-suggest'); if (b) b.innerHTML = ''; } }
+
+  document.body.addEventListener('click', function(e) {
+    if (e.target.closest('#theme-toggle, #theme-toggle-mobile, #theme-toggle-footer')) { toggleTheme(); return; }
+    if (e.target.closest('#search-toggle')) { openSearch(); return; }
+    if (e.target.closest('#search-close')) { closeSearch(); return; }
+    // Close open dropdowns (user menu + language picker) on click outside.
+    document.querySelectorAll('.user-menu[open], .lang-menu[open]').forEach(function(d) {
+      if (!d.contains(e.target)) d.removeAttribute('open');
+    });
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { var o = overlay(); if (o && !o.hidden) closeSearch(); }
+  });
+
+  // ── Live results while typing ───────────────────────────────────
+  var _ST = {
+    posts: '<%= t('search.section_posts') %>', tracks: '<%= t('search.section_tracks') %>',
+    events: '<%= t('search.section_events') %>', pages: '<%= t('search.section_pages') %>',
+    all: '<%= t('search.suggest_all') %>', none: '<%= t('search.suggest_empty') %>'
+  };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function renderSuggest(box, d, q, ov) {
+    var html = '';
+    function grp(title, items, fmt) {
+      if (!items || !items.length) return;
+      html += '<div class="ss-group"><div class="ss-title">' + esc(title) + '</div>' + items.map(fmt).join('') + '</div>';
+    }
+    grp(_ST.posts, d.posts, function(p){ return '<a class="ss-item" href="' + esc(p.url) + '">' + esc(p.title) + '</a>'; });
+    grp(_ST.tracks, d.tracks, function(tk){ var sub = tk.artist ? ' <span class="ss-sub">' + esc(tk.artist) + '</span>' : ''; return tk.url ? '<a class="ss-item" href="' + esc(tk.url) + '">' + esc(tk.title) + sub + '</a>' : '<span class="ss-item ss-noclick">' + esc(tk.title) + sub + '</span>'; });
+    grp(_ST.events, d.events, function(ev){ return '<a class="ss-item" href="' + esc(ev.url) + '">' + esc(ev.where || ev.when) + ' <span class="ss-sub">' + esc(ev.when) + '</span></a>'; });
+    grp(_ST.pages, d.pages, function(pg){ return '<a class="ss-item" href="' + esc(pg.url) + '">' + esc(pg.label) + '</a>'; });
+    var hasAny = (d.posts && d.posts.length) || (d.tracks && d.tracks.length) || (d.events && d.events.length) || (d.pages && d.pages.length);
+    if (!hasAny) { box.innerHTML = '<div class="ss-empty">' + esc(_ST.none) + '</div>'; return; }
+    var action = (ov && ov.getAttribute('data-action')) || '/search';
+    html += '<a class="ss-all" href="' + esc(action) + '?q=' + encodeURIComponent(q) + '">' + esc(_ST.all) + '</a>';
+    box.innerHTML = html;
+  }
+  var _sTimer;
+  document.addEventListener('input', function(e) {
+    var inp = e.target.closest && e.target.closest('#search-overlay input[name="q"]');
+    if (!inp) return;
+    var box = document.getElementById('search-suggest');
+    if (!box) return;
+    var q = inp.value.trim();
+    clearTimeout(_sTimer);
+    if (q.length < 2) { box.innerHTML = ''; return; }
+    _sTimer = setTimeout(function() {
+      var ov = document.getElementById('search-overlay');
+      var url = (ov && ov.getAttribute('data-suggest')) || '/search/suggest';
+      fetch(url + '?q=' + encodeURIComponent(q))
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){ if (d) renderSuggest(box, d, q, ov); })
+        .catch(function(){});
+    }, 200);
+  });
+  // Click on a suggestion → close the overlay (the link/boost handles navigation).
+  document.addEventListener('click', function(e) {
+    if (e.target.closest && e.target.closest('#search-suggest a')) { var o = overlay(); if (o) o.hidden = true; }
+  });
+})();
+</script>
+
+<style>
+/* ============================================================
+   TOP-NAV — responsive
+   Mobile: brand centered, small theme btn right, NOTHING else.
+   Desktop (≥768px): full v9 layout — brand left, action row right.
+   ============================================================ */
+
+.masthead-inner {
+  /* Override v9's flex-end → space-between so brand is on the left */
+  justify-content: space-between !important;
+  gap: 1rem;
+}
+.masthead-brand .site-title,
+.masthead-brand .nav-link-admin {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Site title is suppressed everywhere — the profile-header carries the brand
+   on content pages, and admin pages have their own "← Terug naar site" link
+   (a different selector, .nav-link-admin, which stays visible). The masthead
+   becomes a thin utility strip with just theme-toggle / search / etc. */
+.masthead-brand .site-title {
+  display: none;
+}
+
+/* Hub-home brand IS visible — the home button on artist/hub pages. */
+.masthead-brand .nav-hub-home {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px;
+  color: var(--ink); text-decoration: none;
+  border-radius: 8px;
+  transition: color 120ms, background 120ms;
+}
+.masthead-brand .nav-hub-home:hover { color: var(--accent); background: var(--paper-2); }
+.masthead-brand .nav-hub-home svg { width: 22px; height: 22px; }
+
+/* On mobile, hide the entire masthead except for admin pages. The brand
+   appears in the profile-header on content pages, and the bottom-tab
+   provides all navigation. Admin keeps it because the "← Terug naar site"
+   link is the only way back to the public site from /admin/*. */
+@media (max-width: 767px) {
+  body:not(.on-admin) .masthead { display: none; }
+  /* The masthead is gone on mobile, so it can't carry the iOS safe-area top inset
+     (env() resolves to 0 in the home-screen PWA; --ios-safe-top is set by JS in shell).
+     Pad the body instead so the profile-header clears the Dynamic Island / notch. */
+  body:not(.on-admin) { padding-top: var(--ios-safe-top, 0px); }
+}
+
+/* On mobile, center the brand in the masthead */
+@media (max-width: 767px) {
+  .masthead-inner {
+    justify-content: center !important;
+    position: relative;
+  }
+  .masthead-brand {
+    text-align: center;
+  }
+  /* Lone theme button for logged-out users — minimal, icon-only,
+     no border/background to avoid the iOS sticky-hover look. */
+  .top-nav-mobile {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .top-nav-mobile .nav-btn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    background: transparent !important;
+    border-color: transparent !important;
+    color: var(--ink-soft);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .top-nav-mobile .nav-btn:active {
+    transform: scale(0.92);
+    color: var(--ink);
+  }
+  /* Suppress sticky hover on touch — only show feedback for real hover devices */
+  @media (hover: none) {
+    .top-nav-mobile .nav-btn:hover {
+      background: transparent !important;
+      border-color: transparent !important;
+      color: var(--ink-soft);
+    }
+  }
+  .top-nav-desktop {
+    display: none !important;
+  }
+}
+
+/* On desktop, hide the mobile-only theme button */
+@media (min-width: 768px) {
+  .top-nav-mobile { display: none; }
+}
+
+/* ── Admin "back" link styling (inherited from v9 patterns) ── */
+.nav-link-admin {
+  background: var(--accent);
+  color: #fff !important;
+  padding: .5rem .85rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-family: var(--font-ui);
+  font-size: .875rem;
+  font-weight: 500;
+}
+.nav-link-admin:hover { opacity: .9; color: #fff !important; }
+
+/* ── Tap-target enforcement for all nav buttons on touch ── */
+@media (hover: none) {
+  .nav-btn, .nav-link {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .nav-btn:active {
+    transform: scale(0.95);
+    background: var(--paper-2);
+  }
+}
+
+/* ── User dropdown (desktop only — mobile uses bottom-tab → /account) ── */
+.user-menu { position: relative; list-style: none; }
+.user-menu > summary {
+  list-style: none; cursor: pointer;
+  padding: .25rem; border-radius: 6px;
+  display: inline-flex; align-items: center;
+  border: 1px solid transparent;
+  transition: all var(--transition);
+}
+.user-menu > summary::-webkit-details-marker { display: none; }
+.user-menu > summary::marker { content: ''; }
+.user-menu > summary:hover { background: var(--paper-2); border-color: var(--rule); }
+.user-avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--paper-2);   /* neutral so transparent avatars blend */
+  color: var(--accent);          /* fallback initial color */
+  font-family: var(--font-ui); font-weight: 600; font-size: .8rem;
+  pointer-events: none;
+  overflow: hidden;
+}
+.user-avatar-img {
+  /* When the pill renders as <img> instead of <span>, fill it edge-to-edge. */
+  object-fit: cover;
+}
+.user-dropdown {
+  position: absolute; top: calc(100% + .55rem); right: 0;
+  min-width: 220px;
+  padding: .35rem;
+  /* Frosted glass: transparent + heavy blur so the frosted effect is clearly visible. */
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+  backdrop-filter: blur(34px) saturate(190%);
+  -webkit-backdrop-filter: blur(34px) saturate(190%);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent),
+    0 8px 24px color-mix(in srgb, var(--ink) 14%, transparent),
+    0 16px 48px color-mix(in srgb, var(--ink) 10%, transparent);
+  z-index: 200;
+  font-family: var(--font-ui);
+  transform-origin: top right;
+}
+/* Open animation — only fires when <details open> matches, so closing the
+   dropdown doesn't replay the entry animation. */
+.user-menu[open] > .user-dropdown {
+  animation: ud-fade-in .14s cubic-bezier(.2, .8, .25, 1);
+}
+@keyframes ud-fade-in {
+  from { opacity: 0; transform: translateY(-6px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Identity header — small avatar + username/role badge */
+.user-dropdown-header {
+  display: flex; align-items: center; gap: .65rem;
+  padding: .55rem .65rem .65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--rule) 65%, transparent);
+  margin-bottom: .35rem;
+}
+.udh-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  object-fit: cover;
+  background: var(--paper-2);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.udh-avatar-fallback {
+  color: var(--accent); font-weight: 700; font-size: .95rem;
+}
+.udh-meta { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.udh-name {
+  font-weight: 600; font-size: .92rem; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;
+}
+.udh-role {
+  font-size: .68rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--accent); opacity: .85; margin-top: .12rem;
+}
+
+/* Item list group */
+.user-dropdown-list { display: flex; flex-direction: column; gap: 1px; }
+.user-dropdown-divider {
+  height: 1px;
+  margin: .35rem .25rem;
+  background: color-mix(in srgb, var(--rule) 60%, transparent);
+}
+
+/* Items — icon + label, rounded inner highlight on hover (macOS feel) */
+.user-dropdown .udi {
+  display: flex; align-items: center; gap: .65rem;
+  padding: .5rem .65rem;
+  color: var(--ink); text-decoration: none;
+  font-size: .88rem; font-weight: 500;
+  border-radius: 7px;
+  transition: background var(--transition), color var(--transition), transform var(--transition);
+}
+.user-dropdown .udi:hover,
+.user-dropdown .udi:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, var(--paper-2));
+  color: var(--accent);
+  outline: none;
+}
+.user-dropdown .udi:active { transform: scale(.98); }
+.user-dropdown .udi-icon {
+  width: 16px; height: 16px;
+  opacity: .7;
+  flex-shrink: 0;
+  transition: opacity var(--transition);
+}
+.user-dropdown .udi:hover .udi-icon,
+.user-dropdown .udi:focus-visible .udi-icon { opacity: 1; }
+
+/* Logout: subtle danger tint on hover, never on rest. Uses a fixed red so
+   it always reads as a destructive action even if the user's accent is red. */
+.user-dropdown .udi-danger:hover,
+.user-dropdown .udi-danger:focus-visible {
+  background: color-mix(in srgb, #dc2626 14%, var(--paper-2));
+  color: #dc2626;
+}
+
+/* ── Search overlay ── */
+.search-overlay {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: color-mix(in srgb, var(--paper) 96%, transparent);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--rule);
+  padding: 1rem 0; z-index: 200;
+  padding-top: calc(1rem + env(safe-area-inset-top, 0));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.search-overlay-form { display: flex; gap: .5rem; align-items: center; }
+.search-overlay-form input {
+  flex: 1; padding: .85rem 1rem;
+  min-height: 44px;
+  border: 1px solid var(--rule); border-radius: 8px;
+  font-family: var(--font-ui); font-size: 1rem;
+  background: var(--paper); color: var(--ink);
+}
+.search-overlay-form input:focus {
+  outline: 2px solid var(--accent); outline-offset: 0;
+}
+.search-overlay-form .nav-btn {
+  width: 44px; height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+/* Live-resultaten dropdown */
+.search-suggest { margin-top: .6rem; max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: .25rem; }
+.search-suggest:empty { display: none; }
+.ss-group { padding: .25rem 0; }
+.ss-title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft, var(--ink-muted)); padding: .35rem .25rem .2rem; }
+.ss-item { display: block; padding: .55rem .6rem; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: .95rem; }
+.ss-item:hover { background: var(--paper-2); color: var(--accent); }
+.ss-item.ss-noclick { opacity: .7; cursor: default; }
+.ss-sub { color: var(--ink-soft, var(--ink-muted)); font-size: .85em; }
+.ss-empty { padding: .8rem .6rem; color: var(--ink-soft, var(--ink-muted)); font-size: .9rem; }
+.ss-all { display: block; margin-top: .35rem; padding: .55rem .6rem; border-top: 1px solid var(--rule); color: var(--accent); font-weight: 600; text-decoration: none; font-size: .9rem; }
+.ss-all:hover { text-decoration: underline; }
+/* Notification bell + unread badge */
+.nav-notif { position: relative; }
+.notif-badge {
+  position: absolute; top: 1px; right: 1px;
+  min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #e0245e; color: #fff; font-size: 10px; font-weight: 700;
+  border-radius: 999px; line-height: 1; pointer-events: none;
+}
+</style>

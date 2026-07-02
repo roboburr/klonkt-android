@@ -1,0 +1,616 @@
+<%
+// In hub mode the site is accessible under /user/<slug>; all site-scoped links
+// (tag, edit, delete, comments) must carry that prefix otherwise they fall back
+// to the primary site → 404 / wrong site. In solo mode _base = ''.
+const _base = (typeof siteUrlBase !== 'undefined' && siteUrlBase) ? siteUrlBase : '';
+%>
+<article class="container post-page<%= post.nsfw ? ' nsfw-gate' : '' %>">
+
+  <%# Navigation across ALL posts — ABOVE the post (shared partial). %>
+  <%- include('../partials/post-nav', { newerPost: newerPost, olderPost: olderPost }) %>
+
+  <% if (post.nsfw) { %>
+    <div class="nsfw-banner">
+      <span class="nsfw-banner-icon">🔞</span>
+      <span class="nsfw-banner-text"><%= post.content_warning || t('post.nsfw_warning') %></span>
+      <button type="button" class="nsfw-banner-btn nsfw-reveal"><%= t('post.nsfw_show') %></button>
+    </div>
+  <% } %>
+
+  <% if (post.cover_image_url) { %>
+    <figure class="post-cover">
+      <img src="<%= post.cover_image_url %>" alt="<%= post.cover_alt || '' %>"<% if (post.cover_video_url) { %> data-ios-mp4="<%= post.cover_video_url %>"<% } %>>
+    </figure>
+  <% } %>
+
+  <header class="post-header">
+    <h1 class="post-title"><%= post.title %></h1>
+    <div class="post-meta">
+      <a class="author" href="/users/<%= encodeURIComponent(post.author_username) %>"
+         hx-get="/users/<%= encodeURIComponent(post.author_username) %>?partial=1"
+         hx-target="#pcms-main" hx-swap="innerHTML"
+         hx-push-url="/users/<%= encodeURIComponent(post.author_username) %>"
+         hx-indicator="#pcms-loading"><%= post.author_username %></a>
+      <span class="meta-sep">·</span>
+      <time datetime="<%= post.published_at || post.created_at %>"><%= formatDate(post.published_at || post.created_at) %></time>
+      <% if (post.status !== 'published') { %>
+        <span class="meta-sep">·</span>
+        <span class="status-badge status-<%= post.status %>"><%= post.status %></span>
+      <% } %>
+    </div>
+  </header>
+
+  <div class="post-content">
+    <%- post.content_html %>
+  </div>
+
+  <% if (typeof poll !== 'undefined' && poll) { %>
+    <section class="poll" aria-label="<%= t('poll.aria') %>">
+      <% poll.options.forEach(function(o){ var _lead = poll.total > 0 && o.count === Math.max.apply(null, poll.options.map(function(x){return x.count;})); %>
+        <div class="poll-opt<%= _lead ? ' is-lead' : '' %>">
+          <div class="poll-bar" style="width:<%= o.pct %>%"></div>
+          <span class="poll-name"><%= o.name %></span>
+          <span class="poll-pct"><%= o.pct %>%</span>
+        </div>
+      <% }); %>
+      <div class="poll-meta">
+        <span><%= poll.voters %> <%= poll.voters === 1 ? t('poll.voter_one') : t('poll.voter_many') %></span>
+        <span aria-hidden="true">·</span>
+        <% if (poll.closed) { %>
+          <span><%= t('poll.closed') %></span>
+        <% } else if (poll.endTime) { %>
+          <span><%= t('poll.closes') %> <%= new Date(poll.endTime).toLocaleString() %></span>
+        <% } %>
+        <% if (poll.multiple) { %><span aria-hidden="true">·</span><span><%= t('poll.multiple') %></span><% } %>
+      </div>
+      <p class="poll-note"><%= t('poll.fedi_only') %></p>
+    </section>
+  <% } %>
+
+  <% if (post.tags && post.tags.length > 0) { %>
+    <div class="post-tags">
+      <% post.tags.forEach(t => { %>
+        <a class="tag" href="<%= _base %>/tag/<%= encodeURIComponent(t) %>"
+           hx-get="<%= _base %>/tag/<%= encodeURIComponent(t) %>?partial=1"
+           hx-target="#pcms-main" hx-swap="innerHTML"
+           hx-push-url="<%= _base %>/tag/<%= encodeURIComponent(t) %>"
+           hx-indicator="#pcms-loading">#<%= t %></a>
+      <% }); %>
+    </div>
+  <% } %>
+
+  <div class="post-share" style="margin:1.25rem 0;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+    <button type="button" class="btn post-share-btn" data-share data-share-title="<%= post.title %>">🔗 <%= t('post.share') %></button>
+    <span class="post-share-feedback" id="post-share-feedback" style="color:var(--accent);font-size:.85rem" hidden><%= t('post.share_copied') %></span>
+  </div>
+
+  <!-- Inline admin actions: only visible if user has permission -->
+  <% if (user && (permissions.canEditPost(user, post, site) || permissions.canDeletePost(user, post, site))) { %>
+    <aside class="post-actions">
+      <% if (permissions.canEditPost(user, post, site)) { %>
+        <a href="<%= _base %>/posts/<%= post.slug %>/edit" class="btn"
+           hx-get="<%= _base %>/posts/<%= post.slug %>/edit?partial=1" hx-target="#pcms-main"
+           hx-push-url="<%= _base %>/posts/<%= post.slug %>/edit" hx-indicator="#pcms-loading">
+          ✏️ Edit
+        </a>
+      <% } %>
+      <% if (permissions.canDeletePost(user, post, site)) { %>
+        <form method="post" action="<%= _base %>/posts/<%= post.slug %>/delete" style="display:inline" data-confirm="Delete this post?">
+          <button type="submit" class="btn btn-danger">🗑 Delete</button>
+        </form>
+      <% } %>
+    </aside>
+  <% } %>
+
+  <!-- Fediverse interactions — single place: ⭐ like (clickable) + 🔁/💬 counts + reply -->
+  <% var _postAbsUrl = (typeof ogOrigin !== 'undefined' && ogOrigin ? ogOrigin : '') + (typeof _base !== 'undefined' && _base ? _base : '') + '/' + post.slug; %>
+  <% var _fedi = (typeof fediverse !== 'undefined' && fediverse) ? fediverse : { thread: [], likeCount: 0, announceCount: 0 }; %>
+  <% if (post.status === 'published' && (typeof apEnabled === 'undefined' || apEnabled)) { %>
+    <section class="post-fediverse post-comments" id="fediverse">
+      <h2 class="comments-heading"><%= t('fedi.heading') %></h2>
+      <div class="fedi-stats">
+        <span class="fedi-stat" title="<%= t('fedi.likes') %>">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span><%= _fedi.likeCount %></span>
+        </span>
+        <span class="fedi-stat" title="<%= t('fedi.boosts') %>">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          <span><%= _fedi.announceCount %></span>
+        </span>
+        <span class="fedi-stat" title="<%= t('fedi.replies') %>">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span><%= (_fedi.thread || []).length %></span>
+        </span>
+      </div>
+      <% if (_fedi.thread && _fedi.thread.length) { %>
+        <ol class="comments-list">
+          <% _fedi.thread.forEach(function(n){ %>
+            <li class="comment"><%- include('../partials/fedi-node', { n: n, t: t, canManageSite: (typeof canManageSite !== 'undefined' ? canManageSite : false), _base: _base, siteAvatar: (typeof siteAvatar !== 'undefined' ? siteAvatar : null), formatDateTime: formatDateTime, postSlug: post.slug }) %></li>
+          <% }); %>
+        </ol>
+      <% } %>
+      <%# "Interact via the fediverse" is for VISITORS (reply from their own server).
+          The owner/admin has their own controls + it's their post → hide it for them. %>
+      <% if (typeof canManageSite === 'undefined' || !canManageSite) { %>
+      <div class="post-fediverse-cta">
+        <button type="button" class="btn fedi-remote-reply-btn" data-fedi-uri="<%= _postAbsUrl %>" data-fedi-ph="<%= t('fedi.remote_ph') %>">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          <%= t('fedi.remote_interact') %>
+        </button>
+      </div>
+      <% } %>
+    </section>
+  <% } %>
+  <script>
+  (function(){
+    if (window.__fediRemoteWired) return; window.__fediRemoteWired = true;
+    var current = null, currentBtn = null;
+    function close(){ if (current) { current.remove(); current = null; currentBtn = null; } }
+    function go(raw, uri){
+      var d = (raw||'').trim().replace(/^@?[^@\s]*@/, '').replace(/^https?:\/\//i, '').replace(/\/.*$/, '').trim();
+      if (d) { try { localStorage.setItem('pcmsFediServer', d); } catch(e){} location.href = 'https://' + d + '/authorize_interaction?uri=' + encodeURIComponent(uri||''); }
+    }
+    function place(f, b){
+      var r = b.getBoundingClientRect();
+      f.style.top = (r.bottom + window.scrollY + 6) + 'px';
+      f.style.left = Math.max(8, Math.min(r.left + window.scrollX, window.scrollX + window.innerWidth - 340)) + 'px';
+    }
+    document.addEventListener('click', function(e){
+      if (e.target.closest && e.target.closest('.fedi-remote-cancel')) { close(); return; }
+      if (current && e.target.closest && e.target.closest('.fedi-remote-form')) return; // click inside → keep
+      var b = e.target.closest && e.target.closest('.fedi-remote-reply-btn');
+      if (b) {
+        e.preventDefault();
+        if (currentBtn === b) { close(); return; }   // toggle off
+        close();
+        var f = document.createElement('form');
+        f.className = 'fedi-remote-form';
+        f.dataset.uri = b.getAttribute('data-fedi-uri') || '';
+        f.innerHTML = '<input type="text" autocomplete="off" spellcheck="false">'
+          + '<button type="submit" class="btn btn-primary fedi-remote-go" aria-label="ok">&rarr;</button>'
+          + '<button type="button" class="fedi-remote-cancel" aria-label="x">&times;</button>';
+        var _inp = f.querySelector('input');
+        _inp.placeholder = b.getAttribute('data-fedi-ph') || 'mastodon.social';
+        try { var _sv = localStorage.getItem('pcmsFediServer'); if (_sv) _inp.value = _sv; } catch(e){}
+        document.body.appendChild(f);            // floating popover → no layout reflow
+        place(f, b); current = f; currentBtn = b;
+        _inp.focus(); _inp.select();
+        return;
+      }
+      if (current) close(); // click anywhere else closes it
+    });
+    document.addEventListener('submit', function(e){
+      var f = e.target.closest && e.target.closest('.fedi-remote-form');
+      if (!f) return; e.preventDefault();
+      go(f.querySelector('input').value, f.dataset.uri);
+    });
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape') close(); });
+    window.addEventListener('scroll', close, true);
+  })();
+  </script>
+
+
+  <%# ── Related posts (3-card grid) ─────────────────────────────
+      Always shown if at least one related post exists. Selection logic
+      lives server-side: same-tag posts ranked by overlap, falling back
+      to most-recent if there's no tag overlap. %>
+  <% if (relatedPosts && relatedPosts.length > 0) { %>
+    <section class="post-related" aria-labelledby="related-heading">
+      <h2 class="post-related-heading" id="related-heading"><%= t('related.title') %></h2>
+      <ul class="post-related-grid">
+        <% relatedPosts.forEach(function(rp) { %>
+          <li class="post-related-card">
+            <a href="<%= rp._urlBase || '' %>/<%= rp.slug %>"<% if (!rp._urlBase) { %>
+               hx-get="/<%= rp.slug %>?partial=1" hx-target="#pcms-main"
+               hx-push-url="/<%= rp.slug %>" hx-indicator="#pcms-loading"<% } %>>
+              <% if (rp.cover_image_url) { %>
+                <span class="post-related-cover<%= rp.nsfw ? ' nsfw-media' : '' %>" aria-hidden="true"><img class="post-related-img" src="<%= rp.cover_image_url %>" alt="" loading="lazy" decoding="async"<% if (rp.cover_video_url) { %> data-ios-mp4="<%= rp.cover_video_url %>"<% } %>><% if (rp.nsfw) { %><span class="nsfw-veil"><span class="nsfw-veil-label">🔞 <%= rp.content_warning || t('post.nsfw_warning') %></span><span class="nsfw-veil-btn"><%= t('post.nsfw_show') %></span></span><% } %></span>
+              <% } else { %>
+                <span class="post-related-cover post-related-cover--empty<%= rp.nsfw ? ' nsfw-media' : '' %>" aria-hidden="true"><% if (rp.nsfw) { %><span class="nsfw-veil"><span class="nsfw-veil-label">🔞 <%= rp.content_warning || t('post.nsfw_warning') %></span><span class="nsfw-veil-btn"><%= t('post.nsfw_show') %></span></span><% } %></span>
+              <% } %>
+              <span class="post-related-meta">
+                <span class="post-related-date"><%= formatDate(rp.published_at) %></span>
+                <span class="post-related-title"><%= rp.title %></span>
+              </span>
+            </a>
+          </li>
+        <% }); %>
+      </ul>
+    </section>
+  <% } %>
+
+</article>
+<style>
+.post-page { max-width: 720px; margin: 0.5rem auto 2rem; padding: 0 1rem; }
+.post-cover { margin: 0 0 2rem; border-radius: 8px; overflow: hidden; }
+.post-cover img, .post-cover video { width: 100%; height: auto; display: block; }
+.post-header { margin-bottom: 2rem; }
+.post-title { font-family: var(--font-display, serif); font-size: 2.5rem; line-height: 1.1; margin: 0 0 1rem; }
+@media (max-width: 600px) { .post-title { font-size: 1.85rem; } }
+.post-meta { font-size: 0.9rem; color: var(--ink-muted); }
+.author { font-weight: 500; color: var(--ink-soft); text-decoration: none; }
+.author:hover { color: var(--accent); }
+.post-content { font-family: var(--font-body, serif); font-size: 1.1rem; line-height: 1.7; color: var(--ink); }
+.post-content p { margin: 1.2em 0; }
+/* Poll (a hosted AS2 Question) — display-only; voting happens from the fediverse. */
+.poll { margin: 1.75rem 0; display: flex; flex-direction: column; gap: .5rem; }
+.poll-opt { position: relative; display: flex; align-items: center; gap: .5rem; padding: .55rem .75rem; border: 1px solid var(--line, rgba(128,128,128,.25)); border-radius: 8px; overflow: hidden; font-size: .98rem; }
+.poll-bar { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 18%, transparent); z-index: 0; transition: width .3s ease; }
+.poll-opt.is-lead .poll-bar { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.poll-name { position: relative; z-index: 1; flex: 1; color: var(--ink); }
+.poll-opt.is-lead .poll-name { font-weight: 600; }
+.poll-pct { position: relative; z-index: 1; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.poll-meta { display: flex; flex-wrap: wrap; gap: .4rem; font-size: .85rem; color: var(--ink-muted); }
+.poll-note { font-size: .8rem; color: var(--ink-muted); margin: .1rem 0 0; }
+.like-btn {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  padding: 0.4rem 0.85rem; border: 1px solid var(--rule); border-radius: 999px;
+  background: var(--paper-2); color: var(--ink); font: inherit; font-size: 0.95rem;
+  cursor: pointer; text-decoration: none; transition: border-color 120ms, color 120ms, background 120ms;
+}
+.like-btn:hover { border-color: var(--accent); }
+.like-btn .like-heart { font-size: 1.1rem; line-height: 1; }
+.like-btn.is-liked { border-color: var(--accent); color: var(--accent); }
+.like-btn.is-liked .like-heart { color: var(--accent); }
+.like-btn .like-count { font-variant-numeric: tabular-nums; }
+.post-content h2 { font-family: var(--font-display, serif); font-size: 1.6rem; margin: 2rem 0 1rem; }
+.post-content h3 { font-family: var(--font-display, serif); font-size: 1.3rem; margin: 1.5rem 0 0.75rem; }
+.post-content a { color: var(--accent); }
+.post-content code { background: var(--paper-2); padding: 0.1em 0.4em; border-radius: 3px; font-family: var(--font-mono, monospace); font-size: 0.9em; }
+.post-content pre { background: var(--paper-2); padding: 1rem; border-radius: 6px; overflow-x: auto; }
+.post-content blockquote { border-left: 3px solid var(--accent); padding-left: 1rem; margin: 1.5rem 0; color: var(--ink-soft); font-style: italic; }
+.post-content img { max-width: 100%; height: auto; border-radius: 6px; }
+.post-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 2rem 0; }
+.tag { background: var(--paper-2); color: var(--ink-soft); padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.85rem; text-decoration: none; transition: background 120ms, color 120ms; }
+.tag:hover { background: var(--accent); color: white; }
+.post-actions { display: flex; gap: 0.5rem; margin: 2rem 0; padding: 1rem; background: var(--paper-2); border-radius: 6px; flex-wrap: wrap; }
+
+/* ============================================================
+   Comments
+   ============================================================ */
+.post-comments {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--rule);
+}
+.comments-heading {
+  font-family: var(--font-display, serif);
+  font-size: 1.5rem;
+  margin: 0 0 1.5rem;
+}
+.comments-empty { color: var(--ink-muted, var(--ink-soft)); margin: 0 0 1.5rem; }
+.comments-pending-flash {
+  background: rgba(40, 160, 90, 0.15);
+  color: #2a9d5e;
+  border: 1px solid rgba(40, 160, 90, 0.3);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+.comments-empty a { color: var(--accent); }
+
+.comments-list, .comment-replies {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem;
+}
+
+.comment {
+  display: flex;
+  gap: 0.85rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--rule);
+}
+.comments-list > .comment:first-child { border-top: 0; padding-top: 0; }
+
+.comment-avatar {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.comment-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.comment-avatar span {
+  font-family: var(--font-display, serif);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.comment-body { flex: 1; min-width: 0; }
+.comment-meta {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  row-gap: 0.1rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.3rem;
+}
+.comment-author { color: var(--ink); font-weight: 600; text-decoration: none; }
+.comment-author:hover { color: var(--accent); }
+.comment-time { color: var(--ink-muted, var(--ink-soft)); }
+.comment-meta .fedi-handle { overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .comment-meta .comment-time { flex-basis: 100%; font-size: 0.78rem; color: var(--ink-faint, var(--ink-muted)); }
+}
+.comment-content {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--ink);
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+.comment-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.fedi-owner-react { display: inline; }
+.fedi-owner-reply { display: inline-block; }
+.fedi-owner-reply[open] { flex-basis: 100%; }
+.comment-reply-btn, .comment-delete-btn {
+  background: none;
+  border: 0;
+  color: var(--ink-muted, var(--ink-soft));
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.2rem 0;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.comment-reply-btn:hover { color: var(--accent); }
+.comment-delete-btn:hover { color: #c33; }
+
+/* Owner comment-action icons — same visual language as the News feed, compact (30px). */
+.fedi-cact { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; padding: 0; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center; list-style: none;
+  border: 1px solid color-mix(in srgb, var(--ink, #000) 14%, transparent);
+  background: color-mix(in srgb, var(--ink, #000) 3%, transparent);
+  color: var(--ink-soft, #888); cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background .12s, border-color .12s, transform .1s; }
+.fedi-cact::-webkit-details-marker { display: none; }
+.fedi-cact svg { width: 15px; height: 15px; display: block; }
+.fedi-cact:active { transform: scale(.9); }
+.fedi-cact-like svg { color: #e8b04b; }
+.fedi-cact-like:hover { background: color-mix(in srgb, #e8b04b 15%, transparent); border-color: color-mix(in srgb, #e8b04b 50%, transparent); }
+.fedi-cact-like.is-on { background: color-mix(in srgb, #e8b04b 18%, transparent); border-color: color-mix(in srgb, #e8b04b 60%, transparent); }
+.fedi-cact-boost svg { color: #2fa85a; }
+.fedi-cact-boost:hover { background: color-mix(in srgb, #2fa85a 15%, transparent); border-color: color-mix(in srgb, #2fa85a 50%, transparent); }
+.fedi-cact-boost.is-on { background: color-mix(in srgb, #2fa85a 18%, transparent); border-color: color-mix(in srgb, #2fa85a 60%, transparent); }
+.fedi-cact-reply svg { color: var(--accent, #06c); }
+.fedi-cact-reply:hover { background: color-mix(in srgb, var(--accent, #888) 14%, transparent); border-color: color-mix(in srgb, var(--accent, #888) 50%, transparent); }
+
+.comment-replies {
+  margin-top: 1rem;
+  margin-left: 0;
+  border-left: 2px solid var(--rule);
+  padding-left: 1rem;
+}
+.comment-reply { padding: 0.75rem 0; }
+.comment-replies > .comment-reply:first-child { border-top: 0; padding-top: 0; }
+.comment-reply .comment-avatar { width: 32px; height: 32px; }
+.comment-reply .comment-avatar span { font-size: 0.85rem; }
+
+.comment-form, .comment-reply-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+.comment-form-label { display: flex; flex-direction: column; gap: 0.4rem; }
+.comment-form-label > span { font-size: 0.85rem; color: var(--ink-muted, var(--ink-soft)); }
+.comment-form textarea, .comment-reply-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 70px;
+  max-height: 200px;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+.comment-form button { align-self: flex-start; }
+.comment-reply-form-actions { display: flex; gap: 0.5rem; }
+/* Show the reply form only AFTER clicking REPLY. The display:flex above would
+   otherwise override the [hidden] attribute → form was always open. */
+.comment-reply-form[hidden] { display: none; }
+.fedi-owner-reply summary { list-style: none; cursor: pointer; }
+.fedi-owner-reply summary::-webkit-details-marker { display: none; }
+.fedi-owner-reply[open] summary { margin-bottom: .45rem; }
+/* DELETE button is inside a <form>; display:contents makes it a direct flex-sibling
+   of REPLY → pixel-perfect alignment + equal gap. */
+.comment-actions form { display: contents; }
+
+.comments-login-cta { margin-top: 1.5rem; text-align: center; }
+
+/* ─── Related posts (3-card grid above pinned-nav) ─────────────── */
+.post-related {
+  margin: 3rem auto 1.5rem;
+  /* Break out of the 720px article column so the cards have room to breathe.
+     Cap at 1100 to match other wide content. */
+  max-width: 1100px;
+  padding: 0 1rem;
+}
+.post-related-heading {
+  font-family: var(--font-ui, system-ui), sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--ink-muted, var(--ink-soft));
+  margin: 0 0 1rem;
+}
+.post-related-grid {
+  list-style: none;
+  padding: 0; margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+@media (max-width: 880px) { .post-related-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 540px) { .post-related-grid { grid-template-columns: 1fr; } }
+
+.post-related-card {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 150ms, transform 150ms;
+}
+.post-related-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.post-related-card a {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.post-related-cover {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  background: var(--paper-2) center/cover no-repeat;
+}
+.post-related-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.post-related-cover--empty {
+  background-image: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent) 12%, var(--paper-2)),
+    var(--paper-2));
+}
+.post-related-meta {
+  display: flex; flex-direction: column; gap: 0.4rem;
+  padding: 0.85rem 1rem 1.1rem;
+}
+.post-related-date {
+  font-size: 0.78rem;
+  color: var(--ink-muted, var(--ink-soft));
+  font-variant-numeric: tabular-nums;
+}
+.post-related-title {
+  font-family: var(--font-display, serif);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+/* ─── Pinned navigation cards (v9 style) ───────────────────────── */
+.post-pinned-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1.5rem auto 2rem;
+  max-width: 1100px;
+  padding: 0 1rem;
+}
+@media (max-width: 600px) {
+  .post-pinned-nav { grid-template-columns: 1fr; }
+}
+
+.post-pinned-card {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--paper));
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--ink);
+  transition: border-color 150ms, background 150ms, transform 150ms;
+  min-height: 88px;
+}
+.post-pinned-card:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, var(--paper));
+  transform: translateY(-2px);
+}
+.post-pinned-arrow {
+  font-size: 1.6rem;
+  color: var(--accent);
+  flex-shrink: 0;
+  line-height: 1;
+}
+.post-pinned-card--next {
+  /* "Volgende" card aligns text to the right with the arrow on the right
+     side, mirroring v9 — the arrow is on the OPPOSITE end from the body. */
+  flex-direction: row-reverse;
+  text-align: right;
+}
+.post-pinned-body {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  flex: 1; min-width: 0;
+}
+.post-pinned-label {
+  font-family: var(--font-ui, system-ui), sans-serif;
+  font-size: 0.7rem; font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+.post-pinned-title {
+  font-family: var(--font-display, serif);
+  font-size: 1.05rem; font-weight: 600;
+  color: var(--ink);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.post-pinned-cta {
+  font-size: 0.78rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* Edge-of-stack indicator: dashed border, muted styling. */
+.post-pinned-card--edge {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.35rem;
+  border-style: dashed;
+  background: transparent;
+  color: var(--ink-muted, var(--ink-soft));
+  cursor: default;
+}
+.post-pinned-card--edge:hover {
+  /* Edge cards aren't clickable — undo the lift effect. */
+  transform: none;
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: transparent;
+}
+.post-pinned-edge-label {
+  font-family: var(--font-ui, system-ui), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+}
+.post-pinned-edge-title {
+  font-family: var(--font-display, serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+</style>

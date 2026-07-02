@@ -1,0 +1,241 @@
+<%
+// Post list item — MOBILE-FIRST.
+//
+// <768px (default):
+//   Vertical stack — full-bleed 16:9 cover on top, content below.
+//   Whole card is tappable (one big <a> wrapping everything).
+//   Active state: scale(0.985) + opacity dim.
+//
+// ≥768px (desktop):
+//   v9 pattern — 120px square cover left, content right.
+//   Hover state on cover. Tap-target stays large.
+
+const _base      = (typeof siteUrlBase !== 'undefined' && siteUrlBase) ? siteUrlBase : '';
+const _external  = post.external_url || null;
+const _href      = _external || (_base + '/' + post.slug);
+const _ext       = !!_external;
+const _src       = post.source_name || '';
+const _hasCover  = !!post.cover_image_url || !!post.cover_video_url;
+const _typeLabel = (post.type && post.type !== 'overig' && post.type !== 'post') ? post.type : '';
+const _isPinned  = !!post.pinned;
+const _isBoost   = !!post.isBoost;
+const _isDraft   = post.status && post.status !== 'published';
+
+function _ddmmyyyy(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return pad(d.getDate()) + '-' + pad(d.getMonth() + 1) + '-' + d.getFullYear();
+}
+
+let _tags = [];
+if (post.tags) {
+  if (Array.isArray(post.tags)) _tags = post.tags;
+  else if (typeof post.tags === 'string') {
+    try {
+      const parsed = JSON.parse(post.tags);
+      _tags = Array.isArray(parsed) ? parsed : post.tags.split(',').map(t => t.trim()).filter(Boolean);
+    } catch (e) {
+      _tags = post.tags.split(',').map(t => t.trim()).filter(Boolean);
+    }
+  }
+}
+%>
+<li class="post-list-item<%= (_hasCover || post.nsfw) ? ' has-cover' : '' %><%= (_isPinned || _isBoost) ? ' is-pinned' : '' %>">
+
+  <% if (_hasCover) { %>
+    <a class="post-list-cover<%= post.nsfw ? ' nsfw-media' : '' %>" href="<%= _href %>"
+       <% if (_ext) { %>target="_blank" rel="noopener"<% } else { %>hx-get="<%= _href %>?partial=1" hx-target="#pcms-main" hx-swap="innerHTML" hx-push-url="<%= _href %>" hx-indicator="#pcms-loading"<% } %>
+       aria-label="<%= post.title || '(zonder titel)' %>" tabindex="-1">
+      <% if (post.cover_image_url) { %><img src="<%= thumb(post.cover_image_url, 480) %>"
+           srcset="<%= thumb(post.cover_image_url, 320) %> 320w, <%= thumb(post.cover_image_url, 640) %> 640w, <%= thumb(post.cover_image_url, 1280) %> 1280w"
+           sizes="(min-width: 768px) 120px, 100vw"
+           alt="" loading="lazy" decoding="async"<% if (post.cover_video_url) { %> data-ios-mp4="<%= post.cover_video_url %>"<% } %>>
+      <% } else if (post.cover_video_url) { %><video src="<%= post.cover_video_url %>" poster="<%= thumb(post.cover_video_url, 480) %>" autoplay loop muted playsinline></video><% } %>
+      <% if (post.nsfw) { %><span class="nsfw-veil"><span class="nsfw-veil-label">🔞 <%= post.content_warning || t('post.nsfw_warning') %></span><span class="nsfw-veil-btn"><%= t('post.nsfw_show') %></span></span><% } %>
+    </a>
+  <% } else if (post.nsfw) { %>
+    <a class="post-list-cover nsfw-media" href="<%= _href %>"
+       <% if (_ext) { %>target="_blank" rel="noopener"<% } else { %>hx-get="<%= _href %>?partial=1" hx-target="#pcms-main" hx-swap="innerHTML" hx-push-url="<%= _href %>" hx-indicator="#pcms-loading"<% } %>
+       aria-label="<%= post.title || '(zonder titel)' %>" tabindex="-1">
+      <span class="nsfw-veil"><span class="nsfw-veil-label">🔞 <%= post.content_warning || t('post.nsfw_warning') %></span><span class="nsfw-veil-btn"><%= t('post.nsfw_show') %></span></span>
+    </a>
+  <% } %>
+
+  <div class="post-list-body">
+    <div class="post-list-meta mono">
+      <% if (_isBoost) { %><span class="post-list-pin post-list-boost" aria-label="Boost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span><% } else if (_isPinned) { %><span class="post-list-pin" aria-label="Vastgepind"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg></span><% } %>
+      <time datetime="<%= post.published_at || post.created_at %>"><%= _ddmmyyyy(post.published_at || post.created_at) %></time>
+      <% if (_src) { %><span class="post-list-type">&middot; via <%= _src %></span><% } %>
+      <% if (_typeLabel) { %>
+        <span class="post-list-type">· <%= _typeLabel.charAt(0).toUpperCase() + _typeLabel.slice(1) %></span>
+      <% } %>
+      <% if (_isDraft) { %>
+        <span class="post-list-type post-list-draft">· concept</span>
+      <% } %>
+    </div>
+
+    <h3 class="post-list-title">
+      <a href="<%= _href %>"
+         <% if (_ext) { %>target="_blank" rel="noopener"<% } else { %>hx-get="<%= _href %>?partial=1" hx-target="#pcms-main" hx-swap="innerHTML" hx-push-url="<%= _href %>" hx-indicator="#pcms-loading"<% } %>>
+        <%= post.title || '(zonder titel)' %>
+      </a>
+    </h3>
+
+    <% if (post.excerpt) { %>
+      <p class="post-list-excerpt"><%= post.excerpt %></p>
+    <% } %>
+
+    <% if (_tags.length) { %>
+      <div class="post-list-tags">
+        <% _tags.forEach(function(t) { %>
+          <a href="<%= _base %>/tag/<%= encodeURIComponent(t) %>" class="tag-chip"
+             hx-get="<%= _base %>/tag/<%= encodeURIComponent(t) %>?partial=1" hx-target="#pcms-main"
+             hx-swap="innerHTML" hx-push-url="<%= _base %>/tag/<%= encodeURIComponent(t) %>"
+             hx-indicator="#pcms-loading">#<%= t %></a>
+        <% }); %>
+      </div>
+    <% } %>
+  </div>
+</li>
+
+<style>
+/* ============================================================
+   POST-LIST-ITEM — MOBILE-FIRST OVERRIDE
+   The base v9 styles in /assets/css/style.css use a desktop
+   120×120 grid by default. We flip that: stacked on mobile,
+   side-by-side on ≥768px.
+   ============================================================ */
+
+/* Reset v9's grid on mobile and stack vertically */
+@media (max-width: 767px) {
+  .post-list {
+    gap: 2rem;
+  }
+  .post-list-item {
+    display: flex !important;
+    flex-direction: column;
+    grid-template-columns: none !important;
+    gap: .85rem !important;
+    padding-bottom: 2rem;
+    /* Active feedback for the whole card row */
+    transition: transform 120ms ease, opacity 120ms ease;
+  }
+  .post-list-item:active {
+    transform: scale(0.985);
+    opacity: 0.85;
+  }
+  .post-list-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  /* Cover: full-bleed of the container, 16:9 ratio, no border-radius
+     on small phones (edge-to-edge feels app-native). 8px radius from 480px+. */
+  .post-list-cover {
+    aspect-ratio: 16 / 9 !important;
+    width: 100% !important;
+    border-radius: 0 !important;
+    /* Negative margin to break out of .container's padding */
+    margin-left: calc(-1 * clamp(1.25rem, 4vw, 2rem));
+    margin-right: calc(-1 * clamp(1.25rem, 4vw, 2rem));
+    width: calc(100% + 2 * clamp(1.25rem, 4vw, 2rem)) !important;
+    /* Accent-gradient placeholder shown while the cover loads (the image fades in over it). */
+    background-image: linear-gradient(135deg,
+        color-mix(in srgb, var(--accent, #888) 22%, var(--paper-2)) 0%,
+        color-mix(in srgb, var(--accent, #888) 6%, var(--paper-2)) 100%);
+  }
+  .post-list-cover img, .post-list-cover video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: opacity .4s ease;
+  }
+  .post-list-cover img.is-loading { opacity: 0; }
+
+  /* Re-apply rounded corners on slightly larger phones */
+  @media (min-width: 480px) {
+    .post-list-cover {
+      border-radius: var(--radius) !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      width: 100% !important;
+    }
+  }
+
+  /* Larger title for mobile readability */
+  .post-list-title {
+    font-size: 1.45rem !important;
+    line-height: 1.2 !important;
+  }
+  .post-list-excerpt {
+    font-size: 1rem !important;
+    color: var(--ink-soft) !important;
+    line-height: 1.55 !important;
+  }
+  .post-list-meta {
+    font-size: .8rem !important;
+    gap: .5rem !important;
+  }
+
+  /* Pinned indicator */
+  .post-list-item.is-pinned .post-list-title a {
+    /* No visual change on title — the ★ in meta is enough */
+  }
+
+  /* Tap targets for tags */
+  .post-list-tags { gap: .4rem; }
+  .tag-chip {
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    padding: .2rem .65rem;
+  }
+}
+
+/* ============================================================
+   DESKTOP — keep v9's 120px-square pattern (style.css does this)
+   We just enforce the layout here for clarity + override safety.
+   ============================================================ */
+@media (min-width: 768px) {
+  .post-list-item.has-cover {
+    display: grid !important;
+    grid-template-columns: 120px 1fr !important;
+    gap: 1.25rem !important;
+  }
+  .post-list-item:not(.has-cover) {
+    grid-template-columns: 1fr !important;
+  }
+  .post-list-cover {
+    aspect-ratio: 1 !important;
+    border-radius: var(--radius) !important;
+  }
+  /* Hover lift on desktop (touch devices use :active above) */
+  @media (hover: hover) {
+    .post-list-cover {
+      transition: transform 200ms ease;
+    }
+    .post-list-item:hover .post-list-cover {
+      transform: scale(1.02);
+    }
+  }
+}
+
+/* ============================================================
+   PIN + DRAFT INDICATORS (shared)
+   ============================================================ */
+.post-list-pin {
+  color: var(--accent);
+  margin-right: .35rem;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+.post-list-pin svg { width: 13px; height: 13px; display: block; }
+.post-list-boost { color: #2fa85a; }
+.post-list-draft {
+  color: var(--accent);
+  font-style: italic;
+}
+</style>

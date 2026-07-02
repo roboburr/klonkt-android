@@ -1,0 +1,229 @@
+<div class="container admin-page">
+  <h1><%= t('aset.title') %></h1>
+  <p><a href="/admin" class="btn">&larr; <%= t('aset.back_admin') %></a></p>
+
+  <% if (success) { %><div class="alert alert-success"><%= success %></div><% } %>
+  <% if (typeof error !== 'undefined' && error) { %><div class="alert alert-error"><%= error %></div><% } %>
+
+  <%# ── Mode: Solo or Cirkels (ActivityPub) — the primary, top-of-page choice ── %>
+  <section class="set-card set-card--mode" style="margin-top:1rem">
+    <h2><%= t('aset.mode') %></h2>
+    <p class="set-help"><%= t('aset.mode_help') %></p>
+    <form method="post" action="/admin/settings/ap" class="set-form" id="mode-form"
+          data-was-cirkels="<%= (typeof apEnabledSetting === 'undefined' || apEnabledSetting) ? '1' : '0' %>"
+          data-confirm="<%= t('aset.mode_18plus_confirm') %>">
+      <label class="set-opt">
+        <input type="radio" name="mode" value="solo" <%= (typeof apEnabledSetting !== 'undefined' && !apEnabledSetting) ? 'checked' : '' %>>
+        <span><strong><%= t('aset.mode_solo') %></strong><small><%= t('aset.mode_solo_help') %></small></span>
+      </label>
+      <label class="set-opt">
+        <input type="radio" name="mode" value="cirkels" <%= (typeof apEnabledSetting === 'undefined' || apEnabledSetting) ? 'checked' : '' %>>
+        <span><strong><%= t('aset.mode_cirkels') %></strong><small><%= t('aset.mode_cirkels_help') %></small></span>
+      </label>
+      <div style="display:flex;gap:.6rem;align-items:flex-start;margin:.7rem 0 .2rem;padding:.7rem .85rem;border-radius:10px;border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);background:color-mix(in srgb,var(--accent) 7%,transparent)">
+        <span style="font-size:1.05rem;line-height:1.4;flex:0 0 auto" aria-hidden="true">🔞</span>
+        <span style="font-size:.85rem;line-height:1.5;color:var(--ink)"><%= t('aset.mode_18plus') %></span>
+      </div>
+      <div class="set-actions"><button type="submit" class="btn btn-primary"><%= t('aset.save') %></button></div>
+    </form>
+    <script>
+    (function () {
+      var f = document.getElementById('mode-form');
+      if (!f || f.__age18wired) return; f.__age18wired = true;
+      f.addEventListener('submit', function (e) {
+        var sel = f.querySelector('input[name=mode]:checked');
+        if (sel && sel.value === 'cirkels' && f.getAttribute('data-was-cirkels') === '0') {
+          if (!window.confirm(f.getAttribute('data-confirm'))) e.preventDefault();
+        }
+      });
+    })();
+    </script>
+  </section>
+
+  <%# ── Default language for visitors ── %>
+  <section class="set-card" style="margin-top:1rem">
+    <h2><%= t('aset.default_lang') %></h2>
+    <p class="set-help"><%= t('aset.default_lang_hint') %></p>
+    <form method="post" action="/admin/settings" class="set-form">
+      <label class="set-field">
+        <span><%= t('aset.default_lang') %></span>
+        <select name="default_lang">
+          <option value=""<%= !defaultLang ? ' selected' : '' %>><%= t('aset.default_lang_auto') %></option>
+          <% langs.forEach(function(l){ %>
+            <option value="<%= l.code %>"<%= defaultLang === l.code ? ' selected' : '' %>><%= l.name %></option>
+          <% }); %>
+        </select>
+      </label>
+      <button type="submit" class="btn btn-primary"><%= t('aset.save') %></button>
+    </form>
+  </section>
+
+  <%# ── Timezone ── %>
+  <section class="set-card" style="margin-top:1rem">
+    <h2><%= t('aset.timezone') %></h2>
+    <p class="set-help"><%= t('aset.timezone_hint') %></p>
+    <form method="post" action="/admin/settings" class="set-form">
+      <label class="set-field">
+        <span><%= t('aset.timezone') %></span>
+        <select name="timezone">
+          <option value=""<%= !timezone ? ' selected' : '' %>><%= t('aset.timezone_auto') %></option>
+          <%
+            var _tz = ['Europe/Amsterdam','Europe/Brussels','Europe/Berlin','Europe/Paris','Europe/London','Europe/Madrid','Europe/Rome','Europe/Lisbon','Europe/Warsaw','Europe/Athens','UTC','America/New_York','America/Chicago','America/Los_Angeles','America/Sao_Paulo','Asia/Tokyo','Asia/Dubai','Australia/Sydney'];
+            if (timezone && _tz.indexOf(timezone) < 0) _tz.unshift(timezone);
+          %>
+          <% _tz.forEach(function(z){ %><option value="<%= z %>"<%= timezone === z ? ' selected' : '' %>><%= z %></option><% }); %>
+        </select>
+      </label>
+      <button type="submit" class="btn btn-primary"><%= t('aset.save') %></button>
+    </form>
+  </section>
+
+  <%# Mode-specific config — Circle settings below the mode card. (Hub removed.) %>
+
+  <%# Premium (Patreon) — only visible when the self-hoster enables the premium layer
+      (env KLONKT_PREMIUM_ENABLED=on). Hidden by default; nothing gated. %>
+  <% if (premium && premium.enabled) { %>
+  <section class="set-card" style="margin-top:1rem">
+    <h2><%= t('aset.premium') %></h2>
+    <p class="set-help"><%= t('aset.premium_help_1') %> <strong><%= t('aset.premium_lifetime') %></strong> <%= t('aset.premium_help_2') %></p>
+    <% if (premium.premium) { %>
+      <p class="set-help"><strong>✓ <%= t('aset.premium_active') %></strong>
+        <% if (premium.supportCents) { %><%= t('aset.lifetime_support') %> $<%= (premium.supportCents/100).toFixed(2) %>.<% } %></p>
+      <a href="/admin/patreon/disconnect" class="btn"><%= t('aset.patreon_disconnect') %></a>
+    <% } else if (premium.connected) { %>
+      <p class="set-help"><%= t('aset.patreon_no_lifetime') %><% if (premium.supportCents) { %>
+        (<%= t('aset.now') %> $<%= (premium.supportCents/100).toFixed(2) %>)<% } %>. <%= t('aset.patreon_support_again') %></p>
+      <a href="/admin/patreon/connect" class="btn btn-primary"><%= t('aset.patreon_reconnect') %></a>
+    <% } else { %>
+      <p class="set-help"><%= t('aset.patreon_not_connected') %></p>
+      <a href="/admin/patreon/connect" class="btn btn-primary"><%= t('aset.patreon_connect') %></a>
+    <% } %>
+  </section>
+  <% } %>
+
+  <%# Newsletter signup in the footer (premium). %>
+  <% if (typeof premiumUnlocked === 'undefined' || premiumUnlocked) { %>
+  <section class="set-card" style="margin-top:1rem">
+    <h2><%= t('aset.newsletter') %></h2>
+    <p class="set-help"><%= t('aset.newsletter_help_1') %> <strong><%= t('aset.newsletter_footer_field') %></strong> <%= t('aset.newsletter_help_2') %> <code><%= (typeof siteUrlBase !== 'undefined' && siteUrlBase) ? siteUrlBase : '' %>/nieuwsbrief</code>.)</p>
+    <form method="post" action="/admin/settings/footer" class="set-form">
+      <label class="set-toggle" style="display:flex;align-items:center;gap:.6rem;cursor:pointer">
+        <input type="checkbox" name="footer_newsletter" value="1" <%= footerNewsletter ? 'checked' : '' %>>
+        <span><%= t('aset.newsletter_show_footer') %></span>
+      </label>
+      <div class="set-actions"><button type="submit" class="btn btn-primary"><%= t('aset.save') %></button></div>
+    </form>
+  </section>
+  <% } %>
+
+  <%# E-mail / SMTP — required for sending newsletters, notify-mails and password resets. %>
+  <section class="set-card" style="margin-top:1rem">
+    <h2><%= t('aset.email_smtp') %></h2>
+    <p class="set-help"><%= t('aset.smtp_help_1') %> <strong><%= t('aset.smtp_help_newsletter') %></strong><%= t('aset.smtp_help_2') %> <strong><%= t('aset.smtp_help_notify') %></strong><%= t('aset.smtp_help_3') %>
+      <% if (smtp && smtp.configured) { %><br><strong><%= t('aset.status_set') %>&nbsp;✓</strong><% if (smtp.fromEnv) { %> <small>(<%= t('aset.via_env') %>)</small><% } %><% } else { %><br><%= t('aset.smtp_not_set') %><% } %></p>
+
+    <form method="post" action="/admin/settings/smtp" class="set-form">
+      <label><span><%= t('aset.smtp_host') %></span>
+        <input type="text" name="smtp_host" value="<%= smtp ? smtp.host : '' %>" placeholder="smtp.jouwprovider.nl" autocomplete="off">
+      </label>
+      <label><span><%= t('aset.smtp_port') %> <small style="font-weight:400">— <%= t('aset.smtp_port_hint') %></small></span>
+        <input type="text" name="smtp_port" value="<%= (smtp && smtp.port) ? smtp.port : '' %>" placeholder="587" autocomplete="off" inputmode="numeric">
+      </label>
+      <label><span><%= t('aset.smtp_user') %></span>
+        <input type="text" name="smtp_user" value="<%= smtp ? smtp.user : '' %>" placeholder="jij@jouwprovider.nl" autocomplete="off">
+      </label>
+      <label><span><%= t('aset.smtp_pass') %> <% if (smtp && smtp.passSet) { %><small style="font-weight:400">— <%= t('aset.smtp_pass_set_hint') %></small><% } %></span>
+        <input type="password" name="smtp_pass" placeholder="<%= (smtp && smtp.passSet) ? t('aset.smtp_pass_ph_set') : t('aset.smtp_pass_ph') %>" autocomplete="off">
+      </label>
+      <label><span><%= t('aset.smtp_from') %> <small style="font-weight:400">— <%= t('aset.smtp_from_hint') %></small></span>
+        <input type="text" name="smtp_from" value="<%= smtp ? smtp.from : '' %>" placeholder="<%= t('aset.smtp_from_ph') %>" autocomplete="off">
+      </label>
+      <div class="set-actions">
+        <button type="submit" class="btn btn-primary"><%= t('aset.smtp_save') %></button>
+        <% if (smtp && (smtp.host || smtp.passSet)) { %>
+          <button type="submit" name="clear" value="1" class="btn" formnovalidate><%= t('aset.clear') %></button>
+        <% } %>
+      </div>
+    </form>
+
+    <% if (smtp && smtp.configured) { %>
+      <form method="post" action="/admin/settings/smtp/test" class="set-form" style="margin-top:.8rem">
+        <label><span><%= t('aset.test_mail_to') %></span>
+          <input type="email" name="to" placeholder="jij@email.nl" autocomplete="off">
+        </label>
+        <div class="set-actions"><button type="submit" class="btn">✉ <%= t('aset.send_test_mail') %></button></div>
+      </form>
+    <% } %>
+  </section>
+
+</div>
+
+<style>
+.admin-page { max-width: 700px; margin: 3rem auto; padding: 0 1rem; }
+.admin-page h1 { font-family: var(--font-display, serif); font-size: 2rem; margin: 0 0 0.25rem; }
+.admin-tagline { color: var(--ink-muted); margin: 0 0 2rem; }
+.admin-tagline a { color: var(--accent); }
+.set-card { background: var(--paper-2); border: 1px solid var(--rule); border-radius: 12px; padding: 1.25rem; }
+/* Mode-specific card (Hub/Circle): accent border on the left so it visually
+   belongs to the selected mode, directly below the Mode card. */
+.set-card--mode { border-left: 3px solid var(--accent); }
+.set-card h2 { font-family: var(--font-display, serif); font-size: 1.25rem; margin: 0 0 0.5rem; }
+.set-help { color: var(--ink-muted); font-size: 0.9rem; margin: 0 0 1.25rem; }
+/* Google setup guide (collapsible) */
+.set-google-guide { margin: 0 0 1rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); }
+.set-google-guide > summary { cursor: pointer; padding: 0.6rem 0.85rem; font-size: 0.9rem; font-weight: 600; color: var(--accent); list-style: none; }
+.set-google-guide > summary::-webkit-details-marker { display: none; }
+.set-google-guide > summary::before { content: "▸ "; }
+.set-google-guide[open] > summary::before { content: "▾ "; }
+.set-google-steps { margin: 0; padding: 0 1rem 0.6rem 2rem; font-size: 0.88rem; color: var(--ink); line-height: 1.5; }
+.set-google-steps li { margin: 0.35rem 0; }
+.set-google-guide code { background: var(--paper-2); padding: 0.05rem 0.35rem; border-radius: 4px; font-size: 0.85em; }
+.set-google-guide .set-help { padding: 0 0.85rem; }
+.set-form { display: flex; flex-direction: column; gap: 1rem; max-width: 460px; }
+/* Bare <label>s inside a set-form inherit the same neat stacked style as .set-field:
+   label text on top, input full-width. (.set-toggle = checkbox row, excluded.) */
+.set-form > label:not(.set-toggle):not(.set-opt) { display: flex; flex-direction: column; gap: 0.3rem; }
+.set-form > label:not(.set-toggle):not(.set-opt) > span { font-size: 0.8rem; font-weight: 600; color: var(--ink-soft, var(--ink-muted)); }
+.set-form > label:not(.set-toggle):not(.set-opt) > span small { font-weight: 400; }
+.set-form > label:not(.set-toggle):not(.set-opt) input {
+  width: 100%; box-sizing: border-box; padding: 0.55rem 0.7rem;
+  border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); color: var(--ink);
+  font: inherit; font-size: 0.95rem;
+}
+.set-form > label:not(.set-toggle):not(.set-opt) input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.set-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; }
+.set-opt { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.85rem 1rem; border: 1px solid var(--rule); border-radius: 8px; cursor: pointer; background: var(--paper); }
+.set-opt:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.set-opt input { margin-top: 0.25rem; flex-shrink: 0; }
+.set-opt span { display: flex; flex-direction: column; gap: 0.2rem; }
+.set-opt small { color: var(--ink-muted); font-size: 0.82rem; }
+.set-opt code { background: var(--paper-2); padding: 0.05rem 0.35rem; border-radius: 3px; font-size: 0.85em; }
+.set-form .btn { align-self: flex-start; }
+.set-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.set-field > span { font-size: 0.8rem; font-weight: 600; color: var(--ink-soft, var(--ink-muted)); }
+.set-field input, .set-field textarea {
+  width: 100%; box-sizing: border-box; padding: 0.55rem 0.7rem;
+  border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); color: var(--ink);
+  font: inherit; font-size: 0.95rem;
+}
+.set-field textarea { resize: vertical; }
+.set-field input:focus, .set-field textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+/* Selects styled the same as inputs instead of the bare native dropdown:
+   custom chevron, accent focus ring, full width. */
+.set-form select {
+  appearance: none; -webkit-appearance: none;
+  width: 100%; box-sizing: border-box;
+  padding: 0.55rem 2.2rem 0.55rem 0.7rem;
+  border: 1px solid var(--rule); border-radius: 6px;
+  background-color: var(--paper); color: var(--ink);
+  font: inherit; font-size: 0.95rem; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.7rem center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.set-form select:hover { border-color: var(--ink-soft, #888); }
+.set-form select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.set-form select option { background: var(--paper); color: var(--ink); }
+.alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
+.alert-success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+</style>

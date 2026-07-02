@@ -1,0 +1,105 @@
+<div class="container admin-page">
+  <h1><%= t('aepk.title') %></h1>
+  <p><a href="/admin" class="btn">&larr; <%= t('aepk.back_admin') %></a> <a href="/pers" class="btn" target="_blank" rel="noopener">📰 <%= t('aepk.view_epk') %></a></p>
+
+  <% if (success) { %><div class="alert alert-success"><%= success %></div><% } %>
+
+  <section class="set-card">
+    <h2><%= t('aepk.text_heading') %></h2>
+    <p class="set-help">
+      <%= t('aepk.text_help') %>
+    </p>
+
+    <form method="post" action="/admin/epk" class="set-form">
+      <label class="set-field">
+        <span><%= t('aepk.bio_label') %></span>
+        <textarea name="epk_bio" rows="5" maxlength="1000"
+                  placeholder="<%= t('aepk.bio_ph') %>"><%= epkBio %></textarea>
+      </label>
+      <label class="set-field">
+        <span><%= t('aepk.contact_label') %></span>
+        <input type="text" name="epk_contact" maxlength="300"
+               placeholder="<%= t('aepk.contact_ph') %>"
+               value="<%= epkContact %>">
+      </label>
+
+      <div class="set-field">
+        <span><%= t('aepk.tracks_label') %> <small><%= t('aepk.tracks_hint', { n: maxEpkTracks }) %></small></span>
+        <% if (!allTracks.length) { %>
+          <p class="set-help" style="margin:0"><%= t('aepk.no_tracks') %></p>
+        <% } else { %>
+          <% var _untitled = t('aepk.untitled'); %>
+          <div class="epk-track-pick" data-max="<%= maxEpkTracks %>">
+            <% allTracks.forEach(function(t){ %>
+              <label class="epk-pick-item">
+                <input type="checkbox" name="epk_tracks" value="<%= t.id %>" <%= chosenTracks.indexOf(t.id) >= 0 ? 'checked' : '' %>>
+                <span class="epk-box" aria-hidden="true">✓</span>
+                <span class="epk-pick-title"><%= t.title || _untitled %></span>
+                <% if (t.artist) { %><span class="epk-pick-artist"><%= t.artist %></span><% } %>
+              </label>
+            <% }); %>
+          </div>
+        <% } %>
+      </div>
+
+      <button type="submit" class="btn btn-primary"><%= t('aepk.save') %></button>
+    </form>
+  </section>
+</div>
+
+<style>
+  .admin-page .set-card { background: var(--paper-2); border: 1px solid var(--rule); border-radius: 12px; padding: 1.25rem; margin-top: 1rem; }
+  .admin-page .set-card h2 { font-family: var(--font-display, serif); font-size: 1.25rem; margin: 0 0 0.5rem; }
+  .admin-page .set-help { font-size: 0.85rem; color: var(--ink-soft, var(--ink-muted)); line-height: 1.5; margin: 0 0 1rem; max-width: 60ch; }
+  .admin-page .set-form { display: flex; flex-direction: column; gap: 1rem; max-width: 520px; }
+  .admin-page .set-field { display: flex; flex-direction: column; gap: 0.3rem; }
+  .admin-page .set-field > span { font-size: 0.8rem; font-weight: 600; color: var(--ink-soft, var(--ink-muted)); }
+  .admin-page .set-field input,
+  .admin-page .set-field textarea {
+    width: 100%; box-sizing: border-box;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--rule); border-radius: 6px;
+    background: var(--paper); color: var(--ink);
+    font-family: var(--font-ui, system-ui), sans-serif; font-size: 0.95rem;
+    -webkit-appearance: none; appearance: none;
+  }
+  .admin-page .set-field textarea { resize: vertical; line-height: 1.5; }
+  .admin-page .set-field input:focus,
+  .admin-page .set-field textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+  .admin-page .set-form .btn { align-self: flex-start; }
+  .admin-page .epk-track-pick { display: flex; flex-direction: column; gap: 2px; max-height: 300px; overflow-y: auto; border: 1px solid var(--rule); border-radius: 8px; padding: 4px; }
+  .admin-page .epk-pick-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.6rem; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+  .admin-page .epk-pick-item:hover { background: var(--paper); }
+  /* Native checkbox verbergen; we tekenen een eigen, duidelijk vakje (.epk-box). */
+  .admin-page .epk-pick-item input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+  .admin-page .epk-box {
+    flex: 0 0 auto; width: 20px; height: 20px;
+    border: 2px solid var(--rule); border-radius: 5px;
+    display: grid; place-items: center;
+    color: transparent; font-size: 13px; font-weight: 900; line-height: 1;
+  }
+  .admin-page .epk-pick-item:has(input:checked) .epk-box { background: var(--accent); border-color: var(--accent); color: #fff; }
+  /* Aangevinkte rij ook getint. */
+  .admin-page .epk-pick-item:has(input:checked) {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .admin-page .epk-pick-item:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+  .admin-page .epk-pick-title { font-weight: 600; }
+  .admin-page .epk-pick-artist { color: var(--ink-muted, var(--ink-soft)); font-size: 0.85rem; }
+  .admin-page .epk-pick-item input:disabled ~ .epk-pick-title { opacity: 0.45; }
+</style>
+<script>
+(function () {
+  var box = document.querySelector('.epk-track-pick');
+  if (!box) return;
+  var max = parseInt(box.dataset.max, 10) || 5;
+  function sync() {
+    var checks = box.querySelectorAll('input[type=checkbox]');
+    var n = box.querySelectorAll('input[type=checkbox]:checked').length;
+    checks.forEach(function (c) { c.disabled = (!c.checked && n >= max); });
+  }
+  box.addEventListener('change', sync);
+  sync();
+})();
+</script>

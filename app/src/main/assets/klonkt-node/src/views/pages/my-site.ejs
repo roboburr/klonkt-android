@@ -1,0 +1,73 @@
+<div class="container admin-page">
+  <p><a href="/" class="btn">&larr; <%= t('myst.overview') %></a></p>
+  <h1><%= t('myst.title') %></h1>
+  <p class="admin-tagline"><%= mySite.title %></p>
+
+  <nav class="admin-quick-links" aria-label="<%= t('myst.quick_links_aria') %>">
+    <a href="/user/<%= mySite.slug %>/posts/new" class="btn">✍️ <%= t('myst.new_post') %></a>
+    <a href="/admin/sites/<%= mySite.slug %>/edit" class="btn">🎨 <%= t('myst.appearance') %></a>
+    <a href="/user/<%= mySite.slug %>" class="btn">👁️ <%= t('myst.view_site') %></a>
+    <a href="/account" class="btn">👤 <%= t('myst.account') %></a>
+  </nav>
+
+  <div class="admin-stats">
+    <div class="stat-card"><div class="stat-num"><%= mine.posts %></div><div class="stat-label"><%= t('myst.posts') %></div></div>
+    <div class="stat-card"><div class="stat-num"><%= mine.published %></div><div class="stat-label"><%= t('myst.published') %></div></div>
+  </div>
+
+  <% if (typeof posts !== 'undefined' && posts && posts.length) { %>
+    <% var _drafts = posts.filter(function(p){ return p.isDraft; }).length; %>
+    <%
+      var _lblBadge = t('myst.draft_badge');
+      var _lblUntitled = t('myst.untitled');
+      var _lblEdit = t('myst.edit');
+      var _lblView = t('myst.view');
+    %>
+    <h2 class="ms-posts-title"><%= t('myst.posts') %><% if (_drafts) { %> <span class="pl-draftcount"><%= _drafts === 1 ? t('myst.draft_count_one', { n: _drafts }) : t('myst.draft_count_many', { n: _drafts }) %></span><% } %></h2>
+    <ul class="post-admin-list">
+      <% posts.forEach(function(p) { %>
+        <li class="pal-row<%= p.isDraft ? ' is-draft' : '' %>">
+          <a class="pal-title" href="<%= p.editUrl %>">
+            <% if (p.isDraft) { %><span class="pal-badge"><%= _lblBadge %></span><% } %>
+            <span class="pal-name"><%= p.title || _lblUntitled %></span>
+          </a>
+          <span class="pal-actions">
+            <a class="pal-link" href="<%= p.editUrl %>"><%= _lblEdit %></a>
+            <% if (!p.isDraft) { %><a class="pal-link" href="<%= p.viewUrl %>"><%= _lblView %></a><% } %>
+          </span>
+        </li>
+      <% }); %>
+    </ul>
+  <% } %>
+</div>
+
+<style>
+.admin-page { max-width: 1000px; margin: 3rem auto; padding: 0 1rem; }
+.admin-page h1 { font-family: var(--font-display, serif); font-size: 2rem; margin: 0 0 0.25rem; }
+.admin-tagline { color: var(--ink-muted); margin: 0 0 2rem; }
+.admin-quick-links {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem; margin: 0 0 1.5rem; padding: 0;
+}
+.admin-quick-links .btn { justify-content: center; padding: 0.7rem 0.9rem; font-weight: 600; text-align: center; }
+.admin-quick-links .btn:hover { background: color-mix(in srgb, var(--accent) 8%, var(--paper-2)); border-color: var(--accent); }
+.admin-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; }
+.stat-card { background: var(--paper-2); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.25rem; text-align: center; }
+.stat-num { font-size: 2rem; font-weight: 700; color: var(--accent); line-height: 1; font-family: var(--font-display, serif); }
+.stat-label { color: var(--ink-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
+
+/* Posts/concepten-lijst */
+.ms-posts-title { font-family: var(--font-display, serif); font-size: 1.4rem; margin: 2rem 0 0.75rem; }
+.pl-draftcount { font-family: var(--font-ui, system-ui); font-size: 0.8rem; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 0.1rem 0.55rem; border-radius: 99px; vertical-align: middle; }
+.post-admin-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.pal-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.7rem 0.9rem; border: 1px solid var(--rule); border-radius: 10px; background: var(--paper-2); transition: border-color 120ms; }
+.pal-row:hover { border-color: var(--accent); }
+.pal-row.is-draft { border-left: 3px solid var(--accent); }
+.pal-title { display: inline-flex; align-items: center; gap: 0.6rem; min-width: 0; color: var(--ink); text-decoration: none; font-weight: 600; }
+.pal-title:hover { color: var(--accent); }
+.pal-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-badge { flex-shrink: 0; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 0.1rem 0.5rem; border-radius: 99px; }
+.pal-actions { display: flex; gap: 0.75rem; flex-shrink: 0; }
+.pal-link { color: var(--ink-muted); font-size: 0.85rem; text-decoration: none; white-space: nowrap; }
+.pal-link:hover { color: var(--accent); text-decoration: underline; }
+</style>
