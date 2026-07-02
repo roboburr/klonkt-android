@@ -12,7 +12,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
-import ffmpegPath from 'ffmpeg-static';
+// System ffmpeg via PATH (Termux / Linux)
+const ffmpegPath = 'ffmpeg';
 import WebP from 'node-webpmux';
 
 const execFileP = promisify(execFile);

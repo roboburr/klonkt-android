@@ -13,7 +13,8 @@
  * Uses the bundled `ffmpeg-static` (always present); cwebp is not required here.
  */
 import { execFile } from 'child_process';
-import ffmpegPath from 'ffmpeg-static';
+// System ffmpeg via PATH (Termux / Linux)
+const ffmpegPath = 'ffmpeg';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';

@@ -4,7 +4,7 @@
 
 echo "=== 1. Termux Pakketten Updaten & Installeren ==="
 pkg update && pkg upgrade -y
-pkg install -y nodejs-lts python build-essential git openssh termux-api unzip
+pkg install -y nodejs-lts python build-essential git openssh termux-api unzip ffmpeg
 
 echo "=== 2. Toegang voor Externe Apps (zoals de Klonkt App) Inschakelen ==="
 mkdir -p ~/.termux
