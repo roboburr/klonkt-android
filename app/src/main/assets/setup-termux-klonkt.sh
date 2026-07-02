@@ -20,14 +20,20 @@ mkdir -p ~/klonkt-node
 
 # Download zip file directly from the running Klonkt app's local HTTP server
 if curl -f -s "http://127.0.0.1:3021/klonkt-node.zip" -o ~/klonkt-node.zip; then
-    echo "Bestanden succesvol gedownload. Uitpakken..."
+    echo "Bestanden succesvol gedownload via lokale app. Uitpakken..."
     unzip -q -o ~/klonkt-node.zip -d ~/klonkt-node
     rm ~/klonkt-node.zip
 else
-    echo "Fout bij het downloaden van de Klonkt app. Zorg dat Klonkt open staat!"
-    echo "We vallen terug op het downloaden via git clone..."
-    rm -rf ~/klonkt-node
-    git clone roboburr@91.98.142.161:/home/roboburr/apps/klonkt-demo ~/klonkt-node
+    echo "Fout bij lokaal downloaden (Klonkt staat niet open of is op de achtergrond afgesloten)."
+    echo "We vallen terug op de officiële GitHub release..."
+    if curl -f -L -s "https://github.com/roboburr/klonkt-android/releases/latest/download/klonkt-node.zip" -o ~/klonkt-node.zip; then
+        echo "GitHub fallback succesvol! Uitpakken..."
+        unzip -q -o ~/klonkt-node.zip -d ~/klonkt-node
+        rm ~/klonkt-node.zip
+    else
+        echo "CRITISCHE FOUT: Kan ook niet van GitHub downloaden. Controleer je internetverbinding."
+        exit 1
+    fi
 fi
 
 echo "=== 4. SSH-sleutel controleren of genereren ==="

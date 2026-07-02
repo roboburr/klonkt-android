@@ -41,7 +41,7 @@ class MainActivity : Activity() {
     private val KEY_COMMAND = "termux_command"
     private val KEY_SAVED_VERSION_CODE = "saved_version_code"
 
-    private val DEFAULT_COMMAND = "termux-wake-lock && cd ~/klonkt-node && npm run start & ssh -R 80:localhost:3020 a.pinggy.io"
+    private val DEFAULT_COMMAND = "termux-wake-lock && cd ~/klonkt-node && npm run start > ~/klonkt.log 2>&1 & ssh -R 80:localhost:3020 a.pinggy.io"
 
     @Volatile
     private var pollingSessionId = 0
@@ -318,6 +318,56 @@ class MainActivity : Activity() {
         overlayButtons.addView(configBtn)
 
         dashboardOverlay.addView(overlayButtons)
+        
+        val advancedButtons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dpToPx(24)
+            }
+            gravity = Gravity.CENTER
+        }
+        
+        val repairBtn = TextView(this).apply {
+            text = "REPAREER INSTALLATIE"
+            setTextColor(Color.parseColor("#FFC107"))
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
+            background = GradientDrawable().apply {
+                cornerRadius = dpToPx(4).toFloat()
+                setColor(Color.parseColor("#2C2C2C"))
+            }
+            setOnClickListener {
+                repairTermux()
+            }
+        }
+        advancedButtons.addView(repairBtn)
+        
+        val advancedSpacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dpToPx(16), ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        advancedButtons.addView(advancedSpacer)
+        
+        val logsBtn = TextView(this).apply {
+            text = "BEKIJK LOGS"
+            setTextColor(Color.parseColor("#B0BEC5"))
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
+            background = GradientDrawable().apply {
+                cornerRadius = dpToPx(4).toFloat()
+                setColor(Color.parseColor("#2C2C2C"))
+            }
+            setOnClickListener {
+                viewTermuxLogs()
+            }
+        }
+        advancedButtons.addView(logsBtn)
+        
+        dashboardOverlay.addView(advancedButtons)
         contentFrame.addView(dashboardOverlay)
 
         rootLayout.addView(contentFrame)
@@ -494,6 +544,57 @@ class MainActivity : Activity() {
             dialogBuilder.setNegativeButton("Sluiten", null)
             
             dialogBuilder.show()
+        }
+    }
+
+    private fun repairTermux() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission("com.termux.permission.RUN_COMMAND") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf("com.termux.permission.RUN_COMMAND"), 100)
+                Toast.makeText(this, "Geef Klonkt aub toestemming en klik daarna nog een keer op REPAREER", Toast.LENGTH_LONG).show()
+                return
+            }
+        }
+
+        val intent = Intent().apply {
+            component = ComponentName("com.termux", "com.termux.app.RunCommandService")
+            action = "com.termux.RUN_COMMAND"
+            putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash")
+            putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", "curl -v http://127.0.0.1:3021/setup.sh | bash; echo ''; read -p 'Druk op enter om te sluiten...'"))
+            putExtra("com.termux.RUN_COMMAND_BACKGROUND", false) // false means Termux opens in foreground
+            putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0") // 0 means keep session open
+        }
+        try {
+            startService(intent)
+            Toast.makeText(this, "Termux wordt geopend voor reparatie...", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Fout bij repareren: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun viewTermuxLogs() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission("com.termux.permission.RUN_COMMAND") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf("com.termux.permission.RUN_COMMAND"), 100)
+                Toast.makeText(this, "Geef Klonkt aub toestemming en klik daarna nog een keer op LOGS", Toast.LENGTH_LONG).show()
+                return
+            }
+        }
+
+        val intent = Intent().apply {
+            component = ComponentName("com.termux", "com.termux.app.RunCommandService")
+            action = "com.termux.RUN_COMMAND"
+            putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash")
+            putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", "cat ~/klonkt.log; echo ''; read -p 'Druk op enter om te sluiten...'"))
+            putExtra("com.termux.RUN_COMMAND_BACKGROUND", false) // false means Termux opens in foreground
+            putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0") // 0 means keep session open
+        }
+        try {
+            startService(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Fout bij bekijken logs: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
