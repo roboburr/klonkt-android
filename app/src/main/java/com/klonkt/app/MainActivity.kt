@@ -42,6 +42,8 @@ class MainActivity : Activity() {
     private val KEY_COMMAND = "termux_command"
     private val KEY_AUTO_START = "auto_start"
 
+    private val DEFAULT_COMMAND = "termux-wake-lock && cd ~/klonkt-node && npm run start & ssh -R 80:localhost:3020 a.pinggy.io"
+
     @Volatile
     private var pollingSessionId = 0
 
@@ -322,6 +324,29 @@ class MainActivity : Activity() {
         rootLayout.addView(contentFrame)
         setContentView(rootLayout)
 
+        // Trigger copying of offline installation files if not already done
+        thread {
+            try {
+                val destFolder = java.io.File("/storage/emulated/0/Download/klonkt-node")
+                if (!destFolder.exists()) {
+                    runOnUiThread {
+                        statusText.text = "Klonkt installatiebestanden kopiëren naar Download map..."
+                    }
+                    val success = copyAssetFolder(assets, "klonkt-node", destFolder.absolutePath)
+                    runOnUiThread {
+                        if (success) {
+                            Toast.makeText(this@MainActivity, "Installatiebestanden gekopieerd naar Download/klonkt-node!", Toast.LENGTH_LONG).show()
+                            restartAppLogic()
+                        } else {
+                            Toast.makeText(this@MainActivity, "Kopiëren mislukt. Zorg voor schrijfrechten in Downloads.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         // Start Server in Termux if configured to auto-start
         if (getSavedAutoStart()) {
             startServerInTermux()
@@ -342,7 +367,7 @@ class MainActivity : Activity() {
 
     private fun getSavedCommand(): String {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getString(KEY_COMMAND, "cd ~/klonkt-node && npm run start & ssh -R 80:localhost:3020 a.pinggy.io") ?: "cd ~/klonkt-node && npm run start & ssh -R 80:localhost:3020 a.pinggy.io"
+        return prefs.getString(KEY_COMMAND, DEFAULT_COMMAND) ?: DEFAULT_COMMAND
     }
 
     private fun getSavedAutoStart(): Boolean {
@@ -359,10 +384,37 @@ class MainActivity : Activity() {
         editor.apply()
     }
 
+    private fun copyAssetFolder(assetManager: android.content.res.AssetManager, assetPath: String, destPath: String): Boolean {
+        try {
+            val files = assetManager.list(assetPath) ?: return false
+            if (files.isEmpty()) {
+                val destFile = java.io.File(destPath)
+                destFile.parentFile?.mkdirs()
+                assetManager.open(assetPath).use { input ->
+                    java.io.FileOutputStream(destFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            } else {
+                val folder = java.io.File(destPath)
+                folder.mkdirs()
+                for (file in files) {
+                    val subAssetPath = if (assetPath.isEmpty()) file else "$assetPath/$file"
+                    copyAssetFolder(assetManager, subAssetPath, "$destPath/$file")
+                }
+            }
+            return true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
+    }
+
     private fun startServerInTermux() {
         val port = getSavedPort()
         var command = getSavedCommand()
         
+        // Dynamically replace default port in command if changed in settings
         if (command.contains("localhost:3020") && port != "3020") {
             command = command.replace("localhost:3020", "localhost:$port")
         }
@@ -417,14 +469,12 @@ class MainActivity : Activity() {
                         connection.connectTimeout = 1000
                         connection.readTimeout = 1000
                         connection.requestMethod = "GET"
-                        
-                        // Fetching response code verifies socket is open & listening
                         val responseCode = connection.responseCode
                         connected = true
                     } catch (t: Throwable) {
-                        // Offline or connection refused
+                        // Offline
                     } finally {
-                        connection?.disconnect() // Critical: prevent resource leaks and hangs
+                        connection?.disconnect()
                     }
                     
                     if (!connected && sessionId == pollingSessionId) {
