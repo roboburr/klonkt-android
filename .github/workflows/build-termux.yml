@@ -25,7 +25,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: klonkt-node-arm64.tar.gz
-          key: klonkt-node-arm64-${{ hashFiles('klonkt-android/app/src/main/assets/klonkt-node.zip', 'klonkt-android/ci/prebake.sh') }}
+          key: klonkt-node-arm64-${{ hashFiles('klonkt-android/app/src/main/assets/klonkt-node/**', 'klonkt-android/ci/prebake.sh') }}
 
       - name: Set up QEMU
         if: steps.prebake-cache.outputs.cache-hit != 'true'
@@ -34,7 +34,9 @@ jobs:
       - name: Prebake klonkt-node (aarch64 Termux)
         if: steps.prebake-cache.outputs.cache-hit != 'true'
         run: |
-          unzip -q klonkt-android/app/src/main/assets/klonkt-node.zip -d klonkt-android/klonkt-node-src
+          # Use the git-tracked source dir; the .zip was made on Windows with
+          # backslash path separators and trips unzip (warning exit 1).
+          cp -r klonkt-android/app/src/main/assets/klonkt-node klonkt-android/klonkt-node-src
           chmod -R 777 klonkt-android
           docker run --rm -v "$PWD/klonkt-android:/repo" termux/termux-docker:aarch64 \
             /data/data/com.termux/files/usr/bin/bash /repo/ci/prebake.sh
