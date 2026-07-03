@@ -16,25 +16,19 @@ chmod -R u+rw klonkt-node 2>/dev/null || true
 
 if curl -fL --retry 3 -o klonkt-node.tar.gz "https://github.com/roboburr/klonkt-android/releases/download/termux-latest/klonkt-node-arm64.tar.gz"; then
     rm -rf klonkt-node
-    tar -xzf klonkt-node.tar.gz
+    # Android forbids hard links; older tarballs contained hard-linked build junk.
+    # Tolerate tar's exit status and verify the essentials instead.
+    tar -xzf klonkt-node.tar.gz 2>/dev/null || true
     rm -f klonkt-node.tar.gz
-    echo "Voorgebouwde Klonkt geinstalleerd - geen compilatie nodig."
-else
-    echo "Prebuilt download mislukt - terugvallen op broncode + lokaal bouwen (duurt langer)..."
-    pkg install -y python build-essential git unzip
-    rm -rf klonkt-node
-    mkdir -p klonkt-node
-    if ! curl -fL -o klonkt-node.zip "https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/klonkt-node.zip"; then
-        echo "CRITISCHE FOUT: kan Klonkt niet downloaden. Controleer je internetverbinding."
+    if [ ! -f klonkt-node/package.json ] || [ ! -f klonkt-node/node_modules/better-sqlite3/build/Release/better_sqlite3.node ]; then
+        echo "CRITISCHE FOUT: download onvolledig. Probeer opnieuw: bash ~/.klonkt-start.sh"
         exit 1
     fi
-    unzip -q -o klonkt-node.zip -d klonkt-node
-    rm -f klonkt-node.zip
-    cd klonkt-node
-    # node-gyp on termux looks for an android_ndk_path variable that doesn't exist
-    export GYP_DEFINES="android_ndk_path=''"
-    npm install --no-audit --no-fund
-    cd "$HOME"
+    echo "Voorgebouwde Klonkt geinstalleerd - geen compilatie nodig."
+else
+    echo "CRITISCHE FOUT: kan de voorgebouwde Klonkt niet downloaden."
+    echo "Controleer je internetverbinding en probeer opnieuw: bash ~/.klonkt-start.sh"
+    exit 1
 fi
 
 echo "=== 3/4 klonkt-token commando installeren ==="
