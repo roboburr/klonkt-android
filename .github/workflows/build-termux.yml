@@ -86,8 +86,10 @@ jobs:
 
       - name: Write BUILD-INFO (GPL corresponding-source record)
         run: |
+          BUNDLE_VERSION=$(tar -xzOf klonkt-node-arm64.tar.gz klonkt-node/package.json | grep -o '"version": *"[^"]*"' | head -1 | grep -o '[0-9][^"]*')
           {
             echo "klonkt.apk — modified Termux build (GPLv3)"
+            echo "bundle-version:   ${BUNDLE_VERSION}"
             echo "built:            $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "termux-app:       https://github.com/termux/termux-app @ $(git -C termux-app rev-parse HEAD)"
             echo "modification:     https://github.com/roboburr/klonkt-android @ ${GITHUB_SHA} (termux-patch.diff)"
