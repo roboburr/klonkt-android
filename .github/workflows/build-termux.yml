@@ -6,6 +6,13 @@ on:
       - main
   workflow_dispatch:
 
+# Serialize runs: two concurrent builds both recreate the termux-latest release,
+# and the second one's tag update then fails with "Resource not accessible by
+# integration" (seen three times on 2026-07-04). Queue instead of overlap.
+concurrency:
+  group: termux-apk-build
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -105,13 +112,20 @@ jobs:
           path: klonkt.apk
           if-no-files-found: error
 
+      # Move the rolling tag to this commit, then update the release on it.
+      # (softprops replaces same-name assets; marvinpinto/action-automatic-releases
+      # is archived and its delete-and-recreate approach was flaky.)
+      - name: Move the termux-latest tag
+        run: |
+          git -C klonkt-android tag -f termux-latest
+          git -C klonkt-android push -f origin termux-latest
+
       - name: Publish Release
-        uses: marvinpinto/action-automatic-releases@latest
+        uses: softprops/action-gh-release@v2
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "termux-latest"
+          tag_name: termux-latest
+          name: "Klonkt All-in-One (Termux) — Latest"
           prerelease: true
-          title: "Klonkt All-in-One (Termux) — Latest"
           files: |
             klonkt.apk
             klonkt-node-arm64.tar.gz
