@@ -1,5 +1,5 @@
 diff --git a/app/src/main/java/com/termux/app/TermuxActivity.java b/app/src/main/java/com/termux/app/TermuxActivity.java
-index 0c9f741..95961af 100644
+index 0c9f741..d1c69a7 100644
 --- a/app/src/main/java/com/termux/app/TermuxActivity.java
 +++ b/app/src/main/java/com/termux/app/TermuxActivity.java
 @@ -403,6 +403,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
@@ -75,7 +75,7 @@ index 0c9f741..95961af 100644
 +            fw.write("    curl -sL \"https://raw.githubusercontent.com/roboburr/klonkt-android/main/app/src/main/assets/setup-termux-klonkt.sh?v=10\" | bash\n");
 +            fw.write("  fi\n");
 +            fw.write("fi\n");
-+            fw.write("if [ ! -x \"$PREFIX/bin/klonkt-token\" ]; then\n");
++            fw.write("if true; then  # always refresh the helper\n");
 +            fw.write("  printf '%s\\n' '#!/data/data/com.termux/files/usr/bin/bash' 'if [ -z \"$1\" ]; then echo \"Gebruik: klonkt-token <token> [domein]  (of: klonkt-token clear)\"; exit 1; fi' 'if [ \"$1\" = clear ]; then rm -f ~/.klonkt-tunnel-token ~/.klonkt-domain; echo \"Token en domein gewist. Herstart de app.\"; exit 0; fi' 'printf %s \"$1\" > ~/.klonkt-tunnel-token' 'if [ -n \"$2\" ]; then printf %s \"$2\" | sed \"s#^https*://##\" > ~/.klonkt-domain; echo \"Domein: $2\"; fi' 'echo \"Opgeslagen. Herstart de app of draai: bash ~/.klonkt-start.sh\"' > \"$PREFIX/bin/klonkt-token\"\n");
 +            fw.write("  chmod +x \"$PREFIX/bin/klonkt-token\"\n");
 +            fw.write("fi\n");
