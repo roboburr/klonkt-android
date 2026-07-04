@@ -11,6 +11,12 @@
 #                                     dependency closure) + klonkt-node/
 set -e
 
+# Pin the canonical Termux mirror. The default mirror-rotation sometimes lands on
+# a stale mirror that 404s on packages the fresh index references (build failed
+# on termux.niranjan.co missing vulkan-loader/libtiff/etc). One in-sync mirror
+# for both `apt update` and the downloads avoids that.
+echo "deb https://packages.termux.dev/apt/termux-main stable main" > "$PREFIX/etc/apt/sources.list"
+
 yes | pkg update >/dev/null 2>&1 || true
 
 # 1) Download the FULL dependency closure BEFORE installing anything, so the
